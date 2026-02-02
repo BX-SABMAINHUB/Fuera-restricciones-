@@ -4,10 +4,12 @@ const YOUTUBE_API_KEY = "AIzaSyB95ykqE8irTAT1CFMdevMlpKG64a7Q_Gw";
 
 export default function App() {
   const [query, setQuery] = useState('');
-  const [platform, setPlatform] = useState('youtube');
-  const [results, setResults] = useState([]);
+  const [platform, setPlatform] = useState('safari');
   const [activeEmbed, setActiveEmbed] = useState(null);
+  const [ytResults, setYtResults] = useState([]);
+  const [loading, setLoading] = useState(false);
 
+  // BOTÓN DE PÁNICO A MANAGEBAC
   const activatePanic = () => {
     window.location.href = "managebac://";
     setTimeout(() => { window.location.href = "https://faria.managebac.com/login"; }, 300);
@@ -21,99 +23,111 @@ export default function App() {
 
   const handleSearch = async (e) => {
     if (e) e.preventDefault();
-    if (!query && platform !== 'safari' && platform !== 'discord') return;
+    setLoading(true);
+    setYtResults([]);
 
     const q = encodeURIComponent(query);
 
     if (platform === 'youtube') {
-      const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=20&q=${q}&type=video&key=${YOUTUBE_API_KEY}`);
-      const data = await res.json();
-      setResults(data.items.map(v => ({
-        id: v.id.videoId,
-        title: v.snippet.title,
-        thumb: v.snippet.thumbnails.high.url,
-        embed: `https://www.youtube-nocookie.com/embed/${v.id.videoId}?autoplay=1`
-      })));
-      setActiveEmbed(null);
+      try {
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=15&q=${q}&type=video&key=${YOUTUBE_API_KEY}`);
+        const data = await res.json();
+        setYtResults(data.items || []);
+        setActiveEmbed(null);
+      } catch (err) { alert("Error API YouTube"); }
     } else {
-      const engines = {
-        // SAFARI MODE (Buscador DuckDuckGo que no rastrea y es idéntico a Safari)
-        safari: `https://duckduckgo.com/?q=${q}`,
-        // DISCORD (Usamos un proxy de navegador para que no salga en blanco)
-        discord: `https://discord.com/login`,
-        // TIKTOK (Versión móvil forzada)
-        tiktok: `https://www.tiktok.com/search?q=${q}`,
+      // CAMBIO GRANDE: MOTORES DE INYECCIÓN DE ALTA COMPATIBILIDAD
+      const sources = {
+        safari: `https://duckduckgo.com/?q=${q}&kp=-1&kl=es-es`, // Safari puro
+        tiktok: `https://urlebird.com/search/?q=${q}`, // TikTok Mirror Real
+        discord: `https://discord.com/login`, 
+        instagram: `https://imginn.com/search/?q=${q}`, 
         twitch: `https://player.twitch.tv/?channel=${query.replace(/\s/g, '')}&parent=${window.location.hostname}`,
         movies: `https://vidsrc.to/embed/movie/${query.toLowerCase().replace(/\s/g, '-')}`,
-        twitter: `https://nitter.net/search?q=${q}`,
         reddit: `https://libredd.it/search?q=${q}`,
-        soundcloud: `https://soundcloud.com/search?q=${q}`,
-        pinterest: `https://www.pinterest.com/search/pins/?q=${q}`,
-        archive: `https://archive.org/search.php?query=${q}`
+        pinterest: `https://www.pinterest.es/search/pins/?q=${q}`,
+        spotify: `https://open.spotify.com/embed/search/${q}`,
+        games: `https://repelz.github.io/` // Repositorio de juegos desbloqueados
       };
-      setActiveEmbed(engines[platform]);
+      setActiveEmbed(sources[platform]);
     }
+    setLoading(false);
   };
 
   return (
-    <div style={{ background: '#000', color: '#fff', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto' }}>
+    <div style={{ background: '#000', color: '#fff', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: '-apple-system, system-ui' }}>
       
-      {/* BARRA DE NAVEGACIÓN ESTILO SAFARI / YOUTUBE */}
-      <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', height: '60px', background: '#1a1a1a', position: 'sticky', top: 0, zIndex: 1000 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div onClick={() => window.location.reload()} style={{ cursor: 'pointer', background: '#333', padding: '5px 10px', borderRadius: '8px', fontSize: '12px' }}></div>
+      {/* BARRA DE DIRECCIONES SAFARI PRO */}
+      <header style={{ background: '#1c1c1e', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid #38383a' }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <div onClick={() => setActiveEmbed(null)} style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ff5f56', cursor: 'pointer' }}></div>
+          <div onClick={activatePanic} style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ffbd2e', cursor: 'pointer' }}></div>
+          <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#27c93f' }}></div>
         </div>
 
-        <form onSubmit={handleSearch} style={{ flex: 1, display: 'flex', justifyContent: 'center', maxWidth: '800px', margin: '0 15px' }}>
-          <div style={{ display: 'flex', width: '100%', background: '#2c2c2e', borderRadius: '10px', padding: '2px', border: '1px solid #3a3a3c' }}>
-            <select 
-              value={platform} 
-              onChange={(e) => {setPlatform(e.target.value); setActiveEmbed(null);}}
-              style={{ background: 'transparent', color: '#0A84FF', border: 'none', padding: '0 10px', outline: 'none', fontWeight: 'bold' }}
-            >
-              <option value="safari">Safari</option>
-              <option value="youtube">YouTube</option>
-              <option value="discord">Discord</option>
-              <option value="tiktok">TikTok</option>
-              <option value="twitch">Twitch</option>
-              <option value="movies">Cine</option>
-              <option value="twitter">X</option>
-              <option value="reddit">Reddit</option>
-              <option value="soundcloud">Música</option>
-              <option value="archive">Archivo</option>
-            </select>
-            <input 
-              style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', padding: '8px', outline: 'none', textAlign: 'center' }}
-              placeholder={platform === 'safari' ? "Buscar en Safari..." : "URL o Búsqueda"}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
+        <form onSubmit={handleSearch} style={{ flex: 1, display: 'flex', background: '#2c2c2e', borderRadius: '10px', padding: '4px 10px', alignItems: 'center' }}>
+          <select 
+            value={platform} 
+            onChange={(e) => setPlatform(e.target.value)}
+            style={{ background: 'transparent', color: '#0a84ff', border: 'none', outline: 'none', marginRight: '10px', fontSize: '12px', fontWeight: 'bold' }}
+          >
+            <option value="safari">Safari</option>
+            <option value="youtube">YouTube</option>
+            <option value="tiktok">TikTok</option>
+            <option value="discord">Discord</option>
+            <option value="twitch">Twitch</option>
+            <option value="movies">Cine</option>
+            <option value="spotify">Spotify</option>
+            <option value="reddit">Reddit</option>
+            <option value="games">Juegos</option>
+          </select>
+          <input 
+            style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', outline: 'none', fontSize: '14px', textAlign: 'center' }}
+            placeholder="Buscar o introducir sitio web"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <button type="submit" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#0a84ff' }}>🔍</button>
         </form>
 
-        <button onClick={activatePanic} style={{ background: '#FF3B30', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 15px', fontWeight: 'bold', fontSize: '12px' }}>PÁNICO</button>
-      </nav>
+        <button 
+          onClick={activatePanic} 
+          style={{ background: '#ff3b30', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 12px', fontWeight: 'bold', fontSize: '11px' }}
+        >
+          PÁNICO
+        </button>
+      </header>
 
-      <main style={{ padding: activeEmbed ? '0' : '20px' }}>
+      {/* CONTENEDOR DE PANTALLA COMPLETA */}
+      <main style={{ flex: 1, background: '#000', position: 'relative' }}>
+        {loading && <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 10 }}>Cargando Safari...</div>}
+        
         {activeEmbed ? (
-          <div style={{ width: '100%', height: 'calc(100vh - 60px)', background: '#fff' }}>
-            {/* ESTO ES EL MOTOR SAFARI / MULTI-APP */}
-            <iframe 
-              src={activeEmbed} 
-              style={{ width: '100%', height: '100%', border: 'none' }} 
-              allow="autoplay; fullscreen; microphone; camera"
-              // Quitamos parte del sandbox para que Discord y Safari carguen de verdad
-              sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-modals"
-            ></iframe>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
-            {results.map(v => (
-              <div key={v.id} onClick={() => setActiveEmbed(v.embed)} style={{ cursor: 'pointer' }}>
-                <img src={v.thumb} style={{ width: '100%', borderRadius: '12px' }} />
-                <h4 style={{ marginTop: '10px', fontSize: '14px' }}>{v.title}</h4>
+          <iframe 
+            src={activeEmbed} 
+            style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }}
+            allow="autoplay; fullscreen; microphone; camera"
+            // Sandbox optimizado para permitir login de Discord y videos de TikTok
+            sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-modals allow-storage-access-by-user-activation"
+          ></iframe>
+        ) : ytResults.length > 0 ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px', padding: '20px', overflowY: 'auto', height: '100%' }}>
+            {ytResults.map(v => (
+              <div key={v.id.videoId} onClick={() => setActiveEmbed(`https://www.youtube-nocookie.com/embed/${v.id.videoId}?autoplay=1`)} style={{ cursor: 'pointer' }}>
+                <img src={v.snippet.thumbnails.high.url} style={{ width: '100%', borderRadius: '12px' }} />
+                <h4 style={{ fontSize: '14px', marginTop: '10px', color: '#fff' }}>{v.snippet.title}</h4>
               </div>
             ))}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.5 }}>
+            <h1 style={{ fontSize: '4rem', margin: 0 }}></h1>
+            <p>Safari Hub Pro - Alexgaming</p>
+            <div style={{ display: 'flex', gap: '20px', marginTop: '30px' }}>
+               <div onClick={() => {setPlatform('youtube'); setQuery('MrBeast');}} style={{ cursor: 'pointer', textAlign: 'center' }}><div style={{ fontSize: '24px' }}>▶</div><small>YT</small></div>
+               <div onClick={() => {setPlatform('safari'); setQuery('Apple');}} style={{ cursor: 'pointer', textAlign: 'center' }}><div style={{ fontSize: '24px' }}>🧭</div><small>Safari</small></div>
+               <div onClick={() => setPlatform('discord')} style={{ cursor: 'pointer', textAlign: 'center' }}><div style={{ fontSize: '24px' }}>💬</div><small>Discord</small></div>
+            </div>
           </div>
         )}
       </main>
