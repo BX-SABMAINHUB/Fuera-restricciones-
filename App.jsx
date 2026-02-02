@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-// API KEY ACTUALIZADA
+// API KEY
 const YOUTUBE_API_KEY = "AIzaSyB95ykqE8irTAT1CFMdevMlpKG64a7Q_Gw"; 
 
 export default function App() {
@@ -12,9 +12,16 @@ export default function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // REDIRECCIÓN A MANAGEBAC
+  // REDIRECCIÓN A LA APP DE MANAGEBAC (iPad Deep Link)
   const activatePanic = () => {
-    window.location.href = "https://accounts.fariaedu.com/managebac/login";
+    // Intenta abrir la app directamente
+    window.location.href = "managebac://";
+    
+    // Si en 500ms no ha salido de la web (porque falla el link), 
+    // lo lleva a la web de login para que no se quede la pantalla de YouTube
+    setTimeout(() => {
+      window.location.href = "https://faria.managebac.com/login";
+    }, 500);
   };
 
   useEffect(() => {
@@ -81,10 +88,9 @@ export default function App() {
   return (
     <div style={{ background: '#0f0f0f', color: '#fff', minHeight: '100vh', fontFamily: 'Roboto, Arial' }}>
       
-      {/* NAVBAR */}
       <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', height: '56px', background: '#0f0f0f', borderBottom: '1px solid #333', position: 'sticky', top: 0, zIndex: 1000 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <span style={{ fontSize: '20px', cursor: 'pointer' }}>☰</span>
+          <span style={{ fontSize: '20px' }}>☰</span>
           <div onClick={() => {setView('home'); setSelectedVideo(null);}} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
             <span style={{ color: '#f00', fontSize: '24px' }}>▶</span>
             <span style={{ fontWeight: 'bold', fontSize: '18px', marginLeft: '4px' }}>YouTube</span>
@@ -99,15 +105,14 @@ export default function App() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <button type="submit" style={{ background: '#222', border: 'none', width: '60px', cursor: 'pointer' }}>🔍</button>
+            <button type="submit" style={{ background: '#222', border: 'none', width: '60px' }}>🔍</button>
           </div>
         </form>
 
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-          {/* BOTÓN DE PÁNICO */}
           <button 
             onClick={activatePanic}
-            style={{ background: '#f00', color: '#fff', border: 'none', borderRadius: '5px', padding: '5px 12px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
+            style={{ background: '#f00', color: '#fff', border: 'none', borderRadius: '5px', padding: '5px 12px', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px' }}
           >
             PÁNICO
           </button>
@@ -133,7 +138,7 @@ export default function App() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '15px' }}>
               {activeGame ? (
                 <div style={{ gridColumn: '1 / -1', height: '85vh' }}>
-                  <button onClick={() => setActiveGame(null)} style={{ background: '#444', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '5px', marginBottom: '10px', cursor: 'pointer' }}>Volver</button>
+                  <button onClick={() => setActiveGame(null)} style={{ background: '#444', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '5px', marginBottom: '10px' }}>Volver</button>
                   <iframe src={activeGame} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: '10px' }}></iframe>
                 </div>
               ) : (
