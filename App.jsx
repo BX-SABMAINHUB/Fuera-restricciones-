@@ -7,112 +7,122 @@ export default function App() {
   const [videos, setVideos] = useState([]);
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [view, setView] = useState('home'); 
-  const [activeGameUrl, setActiveGameUrl] = useState(null);
-  const [panicMode, setPanicMode] = useState(false);
+  const [activeGame, setActiveGame] = useState(null);
+  const [panic, setPanic] = useState(false);
 
-  // LISTA DE JUEGOS FILTRADOS QUE NO DAN ERROR DE FRAME
-  const secureGames = [
-    { title: "Minecraft Classic", url: "https://classic.minecraft.net/" },
-    { title: "Subway Surfers", url: "https://daisygames.github.io/subway-surfers/" },
-    { title: "Geometry Dash", url: "https://scratch.mit.edu/projects/105500895/embed" },
-    { title: "Slope 3D", url: "https://math-study.github.io/slope/" },
-    { title: "Retro Bowl", url: "https://rb.vseigru.net/" },
-    { title: "1v1.LOL", url: "https://1v1.lol/" },
-    { title: "Snow Rider 3D", url: "https://racer8.github.io/sr3d/" },
-    { title: "BitLife Clone", url: "https://bitlife-online.github.io/" },
-    { title: "A Small World Cup", url: "https://asmallworldcup.github.io/" },
-    { title: "Eaglercraft 1.5.2", url: "https://g.eaglercraft.com/1.5.2/" }
+  // LISTA DE 40 JUEGOS SELECCIONADOS POR ESTABILIDAD Y ANTI-BLOQUEO
+  const games = [
+    { n: "Minecraft Classic", u: "https://classic.minecraft.net/" },
+    { n: "Subway Surfers", u: "https://daisygames.github.io/subway-surfers/" },
+    { n: "Geometry Dash", u: "https://scratch.mit.edu/projects/105500895/embed" },
+    { n: "Slope", u: "https://math-study.github.io/slope/" },
+    { n: "Retro Bowl", u: "https://game316043.konggames.com/gamez/0031/6043/live/index.html" },
+    { n: "1v1.LOL", u: "https://1v1.lol/" },
+    { n: "Snow Rider 3D", u: "https://racer8.github.io/sr3d/" },
+    { n: "BitLife", u: "https://bitlife-online.github.io/" },
+    { n: "Paper.io 2", u: "https://paper-io.com/" },
+    { n: "Moto X3M", u: "https://moto-x3m.github.io/" },
+    { n: "Among Us Online", u: "https://among-us.github.io/" },
+    { n: "Basket Random", u: "https://basketball-random.github.io/" },
+    { n: "Drive Mad", u: "https://drive-mad.github.io/" },
+    { n: "Stickman Hook", u: "https://stickman-hook.github.io/" },
+    { n: "Drift Hunters", u: "https://drift-hunters.github.io/" },
+    { n: "Temple Run 2", u: "https://temple-run-2.github.io/" },
+    { n: "Crossy Road", u: "https://crossy-road.github.io/" },
+    { n: "Penalty Shooters 2", u: "https://penalty-shooters-2.github.io/" },
+    { n: "Vex 4", u: "https://vex-4.github.io/" },
+    { n: "Bottle Flip 3D", u: "https://bottle-flip-3d.github.io/" },
+    { n: "Pacman", u: "https://pacman.github.io/" },
+    { n: "2048", u: "https://play2048.co/" },
+    { n: "Friday Night Funkin", u: "https://fnf.github.io/" },
+    { n: "Cookie Clicker", u: "https://ozh.github.io/cookieclicker/" },
+    { n: "Eaglercraft 1.8", u: "https://eaglercraft-1-8.vercel.app/" },
+    { n: "Google Snake", u: "https://www.google.com/logos/2010/pacman10-i.html" },
+    { n: "Dino Run", u: "https://wayou.github.io/t-rex-runner/" },
+    { n: "Tetris", u: "https://chvin.github.io/react-tetris/" },
+    { n: "Tomb Mask", u: "https://tomb-of-the-mask.github.io/" },
+    { n: "Cut the Rope", u: "https://cuttherope.github.io/" },
+    { n: "Angry Birds", u: "https://angry-birds.github.io/" },
+    { n: "Mario GBA", u: "https://gba.js.org/mario_kart_super_circuit/" },
+    { n: "Sonic Classic", u: "https://sonic.github.io/" },
+    { n: "Jetpack Joyride", u: "https://jetpack-joyride.github.io/" },
+    { n: "Flappy Bird", u: "https://flappy-bird.github.io/" },
+    { n: "Agar.io", u: "https://agar.io/" },
+    { n: "Slither.io", u: "https://slither.io/" },
+    { n: "Zombs Royale", u: "https://zombsroyale.io/" },
+    { n: "Burrito Bison", u: "https://burrito-bison.github.io/" },
+    { n: "Worlds Hardest Game", u: "https://worlds-hardest-game.github.io/" }
   ];
 
   useEffect(() => {
-    const handleEsc = (e) => { if (e.key === 'Escape') setPanicMode(true); };
+    const handleEsc = (e) => { if (e.key === 'Escape') setPanic(true); };
     window.addEventListener('keydown', handleEsc);
+    if (activeGame) document.title = "Google Classroom";
+    else document.title = "YouTube";
     return () => window.removeEventListener('keydown', handleEsc);
-  }, []);
+  }, [activeGame]);
 
-  useEffect(() => { handleSearch("Top Hits 2026"); }, []);
+  useEffect(() => { handleSearch("Tendencias"); }, []);
 
-  const handleSearch = async (searchTerm) => {
-    setView('home'); setActiveGameUrl(null); setPanicMode(false);
+  const handleSearch = async (s) => {
+    setView('home'); setActiveGame(null); setPanic(false);
     try {
-      const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=20&q=${searchTerm || query}&type=video&key=${YOUTUBE_API_KEY}`);
-      const data = await res.json();
-      setVideos(data.items || []);
-    } catch (e) { console.error(e); }
+      const r = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=20&q=${s || query}&type=video&key=${YOUTUBE_API_KEY}`);
+      const d = await r.json();
+      setVideos(d.items || []);
+    } catch (e) {}
   };
 
-  if (panicMode) {
-    return (
-      <div onClick={() => setPanicMode(false)} style={{ background: 'white', padding: '50px', color: '#333', fontFamily: 'serif', height: '100vh', cursor: 'pointer' }}>
-        <h1 style={{ borderBottom: '2px solid #eee' }}>Sistemas de Ecuaciones Lineales</h1>
-        <p>Un sistema de ecuaciones es un conjunto de dos o más ecuaciones con varias incógnitas en la que deseamos encontrar una solución común.</p>
-        <div style={{ background: '#f9f9f9', border: '1px solid #ddd', padding: '15px', marginTop: '20px' }}>
-          <code>2x + 3y = 8<br/>x - y = 1</code>
-        </div>
-        <p style={{ marginTop: '30px', color: '#999' }}>Presiona en cualquier lugar para reanudar la sesión.</p>
-      </div>
-    );
-  }
+  if (panic) return (
+    <div onClick={() => setPanic(false)} style={{ background: 'white', color: 'black', height: '100vh', padding: '50px', fontFamily: 'serif' }}>
+      <h1>Conceptos de Cálculo: Derivadas</h1>
+      <p>La derivada de una función matemática es la razón o velocidad de cambio de una función en un determinado punto...</p>
+      <div style={{border: '1px solid #ccc', padding: '20px', margin: '20px 0'}}>f'(x) = lim h->0 [f(x+h) - f(x)] / h</div>
+      <p style={{color: '#999'}}>Haga clic para reanudar el estudio.</p>
+    </div>
+  );
 
   return (
-    <div style={{ background: '#0f0f0f', color: 'white', minHeight: '100vh', fontFamily: 'Roboto, Arial' }}>
-      {/* NAVBAR */}
-      <nav style={{ padding: '0 20px', display: 'flex', alignItems: 'center', height: '56px', background: '#0f0f0f', borderBottom: '1px solid #333', position: 'sticky', top: 0, zIndex: 100 }}>
-        <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => {setView('home'); setActiveGameUrl(null);}}>
-          <span style={{ color: 'red', fontSize: '24px' }}>▶</span>
-          <b style={{ marginLeft: '8px' }}>YouTube</b>
+    <div style={{ background: '#0f0f0f', color: 'white', minHeight: '100vh', fontFamily: 'sans-serif' }}>
+      <nav style={{ display: 'flex', alignItems: 'center', padding: '0 20px', height: '56px', background: '#0f0f0f', borderBottom: '1px solid #333', position: 'sticky', top: 0, zIndex: 100 }}>
+        <div onClick={() => {setView('home'); setActiveGame(null);}} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+          <span style={{ color: 'red', fontSize: '24px' }}>▶</span> <b style={{ marginLeft: '5px' }}>YouTube</b>
         </div>
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-          <input 
-            style={{ width: '50%', padding: '10px 20px', borderRadius: '20px', border: '1px solid #333', background: '#121212', color: 'white', outline: 'none' }}
-            placeholder="Buscar..." 
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch(e.target.value)}
-          />
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <input style={{ width: '50%', padding: '8px 15px', borderRadius: '20px', border: '1px solid #333', background: '#121212', color: 'white' }} placeholder="Buscar..." onKeyDown={(e) => e.key === 'Enter' && handleSearch(e.target.value)} />
         </div>
-        <div style={{ display: 'flex', gap: '20px', fontSize: '22px' }}>
-          <span onClick={() => setView('games')} style={{ cursor: 'pointer' }}>🎮</span>
-        </div>
+        <div onClick={() => setView('games')} style={{ cursor: 'pointer', fontSize: '22px' }}>📁</div>
       </nav>
 
-      <div style={{ display: 'flex' }}>
-        <main style={{ flex: 1, padding: '20px' }}>
-          {view === 'games' ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' }}>
-              {activeGameUrl ? (
-                <div style={{ gridColumn: '1 / -1', height: '80vh', position: 'relative' }}>
-                  <button onClick={() => setActiveGameUrl(null)} style={{ position: 'absolute', top: '-40px', right: 0, background: 'red', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' }}>Cerrar juego</button>
-                  <iframe src={activeGameUrl} style={{ width: '100%', height: '100%', border: 'none', borderRadius: '15px', background: 'white' }} allowFullScreen></iframe>
-                </div>
-              ) : (
-                secureGames.map(game => (
-                  <div key={game.title} onClick={() => setActiveGameUrl(game.url)} style={{ background: '#222', padding: '20px', borderRadius: '15px', cursor: 'pointer', textAlign: 'center', border: '1px solid #444' }}>
-                    <div style={{ fontSize: '40px', marginBottom: '10px' }}>📦</div>
-                    <p style={{ fontWeight: 'bold' }}>{game.title}</p>
-                    <small style={{ color: '#3ea6ff' }}>Abrir recurso</small>
-                  </div>
-                ))
-              )}
-            </div>
-          ) : (
-            <>
-              {selectedVideo && (
-                <div style={{ marginBottom: '30px' }}>
-                  <iframe width="100%" height="500px" style={{ borderRadius: '12px' }} src={`https://www.youtube-nocookie.com/embed/${selectedVideo.id.videoId}?autoplay=1`} frameBorder="0" allowFullScreen></iframe>
-                </div>
-              )}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-                {videos.map(v => (
-                  <div key={v.id.videoId} onClick={() => {setSelectedVideo(v); window.scrollTo(0,0);}} style={{ cursor: 'pointer' }}>
-                    <img src={v.snippet.thumbnails.high.url} style={{ width: '100%', borderRadius: '12px' }} alt="thumb" />
-                    <h4 style={{ fontSize: '15px', marginTop: '10px' }}>{v.snippet.title}</h4>
-                    <p style={{ color: '#aaa', fontSize: '13px' }}>{v.snippet.channelTitle}</p>
-                  </div>
-                ))}
+      <main style={{ padding: '20px' }}>
+        {view === 'games' ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '15px' }}>
+            {activeGame ? (
+              <div style={{ gridColumn: '1 / -1', height: '85vh', position: 'relative' }}>
+                <button onClick={() => setActiveGame(null)} style={{ position: 'absolute', top: '-40px', right: 0, background: 'red', border: 'none', color: 'white', padding: '5px 15px', borderRadius: '5px', cursor: 'pointer' }}>Cerrar</button>
+                <iframe src={activeGame} style={{ width: '100%', height: '100%', border: 'none', borderRadius: '10px', background: 'white' }} allowFullScreen></iframe>
               </div>
-            </>
-          )}
-        </main>
-      </div>
+            ) : (
+              games.map(g => (
+                <div key={g.n} onClick={() => setActiveGame(g.u)} style={{ background: '#1a1a1a', padding: '15px', borderRadius: '12px', textAlign: 'center', cursor: 'pointer', border: '1px solid #333' }}>
+                  <div style={{ fontSize: '30px' }}>📄</div>
+                  <p style={{ fontSize: '12px', margin: '10px 0 0' }}>{g.n}</p>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px' }}>
+            {selectedVideo && <iframe width="100%" height="400px" style={{ gridColumn: '1 / -1', borderRadius: '12px' }} src={`https://www.youtube-nocookie.com/embed/${selectedVideo.id.videoId}?autoplay=1`} allowFullScreen></iframe>}
+            {videos.map(v => (
+              <div key={v.id.videoId} onClick={() => {setSelectedVideo(v); window.scrollTo(0,0);}} style={{ cursor: 'pointer' }}>
+                <img src={v.snippet.thumbnails.high.url} style={{ width: '100%', borderRadius: '12px' }} />
+                <p style={{ fontSize: '14px', fontWeight: 'bold', marginTop: '10px' }}>{v.snippet.title}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
     </div>
   );
 }
