@@ -1,16 +1,40 @@
 import React, { useState, useEffect } from 'react';
 
+// API KEY ACTUALIZADA
+const YOUTUBE_API_KEY = "AIzaSyB95ykqE8irTAT1CFMdevMlpKG64a7Q_Gw"; 
+
 export default function App() {
   const [query, setQuery] = useState('');
   const [videos, setVideos] = useState([]);
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [view, setView] = useState('home'); 
   const [activeGame, setActiveGame] = useState(null);
-  const [panic, setPanic] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // LISTA DE 40 JUEGOS (CAMUFLADOS COMO DOCS)
+  // REDIRECCIÓN A MANAGEBAC
+  const activatePanic = () => {
+    window.location.href = "https://accounts.fariaedu.com/managebac/login";
+  };
+
+  useEffect(() => {
+    const handleEsc = (e) => { if (e.key === 'Escape') activatePanic(); };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, []);
+
+  const handleSearch = async (e) => {
+    if (e) e.preventDefault();
+    if (!query) return;
+    setLoading(true); setView('home'); setActiveGame(null);
+    try {
+      const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=20&q=${encodeURIComponent(query)}&type=video&key=${YOUTUBE_API_KEY}`);
+      const data = await res.json();
+      if (data.items) setVideos(data.items);
+    } catch (err) { console.error("Error API"); }
+    finally { setLoading(false); }
+  };
+
   const games = [
     { n: "Subway Surfers", u: "https://daisygames.github.io/subway-surfers/" },
     { n: "Minecraft Classic", u: "https://classic.minecraft.net/" },
@@ -54,97 +78,68 @@ export default function App() {
     { n: "Temple Run 2", u: "https://temple-run-2.github.io/" }
   ];
 
-  useEffect(() => {
-    const handleEsc = (e) => { if (e.key === 'Escape') setPanic(true); };
-    window.addEventListener('keydown', handleEsc);
-    document.title = (activeGame || selectedVideo) ? "Google Classroom" : "YouTube";
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [activeGame, selectedVideo]);
-
-  // Buscador sin API (Usa un servidor proxy público para evitar bloqueos)
-  const handleSearch = async (e) => {
-    if (e) e.preventDefault();
-    if (!query) return;
-    setLoading(true); setView('home'); setActiveGame(null); setPanic(false);
-    
-    try {
-      const res = await fetch(`https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(query)}&filter=videos`);
-      const data = await res.json();
-      setVideos(data.items || []);
-    } catch (err) {
-      alert("Error de conexión. Inténtalo de nuevo.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (panic) return (
-    <div onClick={() => setPanic(false)} style={{ background: '#fff', color: '#000', height: '100vh', padding: '50px', fontFamily: 'serif', cursor: 'pointer' }}>
-      <h1>Apuntes: Historia Contemporánea</h1>
-      <hr />
-      <p>La Revolución Industrial supuso un cambio radical en las estructuras económicas...</p>
-      <p style={{marginTop: '30px', color: '#888'}}>Click para volver.</p>
-    </div>
-  );
-
   return (
-    <div style={{ background: '#0f0f0f', color: '#fff', minHeight: '100vh', fontFamily: 'Roboto, Arial, sans-serif' }}>
+    <div style={{ background: '#0f0f0f', color: '#fff', minHeight: '100vh', fontFamily: 'Roboto, Arial' }}>
       
-      {/* HEADER YOUTUBE STYLE */}
-      <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', height: '56px', background: '#0f0f0f', position: 'sticky', top: 0, zIndex: 1000 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      {/* NAVBAR */}
+      <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', height: '56px', background: '#0f0f0f', borderBottom: '1px solid #333', position: 'sticky', top: 0, zIndex: 1000 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <span style={{ fontSize: '20px', cursor: 'pointer' }}>☰</span>
-          <div onClick={() => {setView('home'); setSelectedVideo(null); setActiveGame(null);}} style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-            <span style={{ color: '#ff0000', fontSize: '24px' }}>▶</span>
-            <span style={{ fontWeight: 'bold', fontSize: '20px', marginLeft: '4px', letterSpacing: '-1.2px' }}>YouTube</span>
+          <div onClick={() => {setView('home'); setSelectedVideo(null);}} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+            <span style={{ color: '#f00', fontSize: '24px' }}>▶</span>
+            <span style={{ fontWeight: 'bold', fontSize: '18px', marginLeft: '4px' }}>YouTube</span>
           </div>
         </div>
 
-        <form onSubmit={handleSearch} style={{ flex: 1, display: 'flex', justifyContent: 'center', maxWidth: '720px' }}>
-          <div style={{ display: 'flex', width: '90%', background: '#121212', borderRadius: '40px', border: '1px solid #333', overflow: 'hidden' }}>
+        <form onSubmit={handleSearch} style={{ flex: 1, display: 'flex', justifyContent: 'center', maxWidth: '600px' }}>
+          <div style={{ display: 'flex', width: '100%', background: '#121212', borderRadius: '40px', border: '1px solid #333', overflow: 'hidden' }}>
             <input 
-              style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', padding: '0 20px', height: '40px', outline: 'none' }}
-              placeholder="Buscar"
+              style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', padding: '0 20px', height: '38px', outline: 'none' }}
+              placeholder="Buscar..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <button type="submit" style={{ background: '#222', border: 'none', width: '64px', cursor: 'pointer', borderLeft: '1px solid #333' }}>🔍</button>
+            <button type="submit" style={{ background: '#222', border: 'none', width: '60px', cursor: 'pointer' }}>🔍</button>
           </div>
         </form>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <span onClick={() => setView('games')} style={{ cursor: 'pointer', fontSize: '22px' }}>📁</span>
-          <div onClick={() => setShowAbout(!showAbout)} style={{ cursor: 'pointer', opacity: 0.5, fontSize: '12px' }}>About Me</div>
+        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+          {/* BOTÓN DE PÁNICO */}
+          <button 
+            onClick={activatePanic}
+            style={{ background: '#f00', color: '#fff', border: 'none', borderRadius: '5px', padding: '5px 12px', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}
+          >
+            PÁNICO
+          </button>
+          <span onClick={() => setView('games')} style={{ cursor: 'pointer', fontSize: '20px' }}>📁</span>
+          <div onClick={() => setShowAbout(!showAbout)} style={{ cursor: 'pointer', width: '30px', height: '30px', background: '#3ea6ff', borderRadius: '50%', textAlign: 'center', lineHeight: '30px', fontWeight: 'bold' }}>👤</div>
         </div>
       </nav>
 
-      {/* ABOUT ME POPUP */}
       {showAbout && (
-        <div style={{ position: 'fixed', top: '60px', right: '20px', background: '#282828', padding: '15px', borderRadius: '8px', zIndex: 2000, border: '1px solid #444' }}>
+        <div style={{ position: 'fixed', top: '60px', right: '16px', background: '#282828', padding: '15px', borderRadius: '8px', zIndex: 2000, border: '1px solid #444' }}>
           <p style={{ margin: 0 }}>Made by <b style={{color: '#3ea6ff'}}>Alexgaming</b></p>
         </div>
       )}
 
       <div style={{ display: 'flex' }}>
-        {/* SIDEBAR */}
-        <aside style={{ width: '72px', paddingTop: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
+        <aside style={{ width: '72px', paddingTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '25px' }}>
           <div onClick={() => setView('home')} style={{cursor:'pointer', fontSize: '10px', textAlign:'center'}}>🏠<br/>Inicio</div>
-          <div onClick={() => setView('games')} style={{cursor:'pointer', fontSize: '10px', textAlign:'center'}}>📁<br/>Juegos</div>
+          <div onClick={() => setView('games')} style={{cursor:'pointer', fontSize: '10px', textAlign:'center'}}>📁<br/>Material</div>
         </aside>
 
-        {/* MAIN CONTENT */}
         <main style={{ flex: 1, padding: '24px' }}>
           {view === 'games' ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '15px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '15px' }}>
               {activeGame ? (
-                <div style={{ gridColumn: '1 / -1', height: '82vh' }}>
-                  <button onClick={() => setActiveGame(null)} style={{ background: '#333', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '5px', marginBottom: '10px', cursor: 'pointer' }}>Volver al material</button>
-                  <iframe src={activeGame} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: '12px' }}></iframe>
+                <div style={{ gridColumn: '1 / -1', height: '85vh' }}>
+                  <button onClick={() => setActiveGame(null)} style={{ background: '#444', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '5px', marginBottom: '10px', cursor: 'pointer' }}>Volver</button>
+                  <iframe src={activeGame} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: '10px' }}></iframe>
                 </div>
               ) : (
                 games.map(g => (
-                  <div key={g.n} onClick={() => setActiveGame(g.u)} style={{ background: '#1a1a1a', padding: '20px', borderRadius: '12px', textAlign: 'center', cursor: 'pointer', border: '1px solid #333' }}>
-                    <div style={{fontSize: '30px'}}>📄</div>
+                  <div key={g.n} onClick={() => setActiveGame(g.u)} style={{ background: '#1a1a1a', padding: '20px', borderRadius: '15px', textAlign: 'center', cursor: 'pointer', border: '1px solid #333' }}>
+                    <div style={{fontSize: '32px'}}>📄</div>
                     <p style={{ fontSize: '12px', marginTop: '10px' }}>{g.n}</p>
                   </div>
                 ))
@@ -156,26 +151,25 @@ export default function App() {
                 <div style={{ marginBottom: '30px' }}>
                   <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0 }}>
                     <iframe 
-                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', borderRadius: '12px' }}
-                      src={`https://www.youtube-nocookie.com/embed/${selectedVideo.url.split('=')[1] || selectedVideo.url.split('/').pop()}?autoplay=1`}
-                      frameBorder="0" allowFullScreen
+                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', borderRadius: '12px', border: 'none' }}
+                      src={`https://www.youtube-nocookie.com/embed/${selectedVideo.id.videoId}?autoplay=1`}
+                      allowFullScreen
                     ></iframe>
                   </div>
-                  <h1 style={{ fontSize: '20px', marginTop: '15px' }}>{selectedVideo.title}</h1>
-                  <p style={{color: '#aaa'}}>{selectedVideo.uploaderName}</p>
+                  <h2 style={{marginTop: '15px'}}>{selectedVideo.snippet.title}</h2>
                 </div>
               )}
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-                {loading && <p>Buscando videos...</p>}
+                {loading && <p>Cargando...</p>}
                 {videos.map(v => (
-                  <div key={v.url} onClick={() => {setSelectedVideo(v); window.scrollTo({top:0, behavior:'smooth'});}} style={{ cursor: 'pointer' }}>
-                    <img src={v.thumbnail} style={{ width: '100%', borderRadius: '12px', aspectRatio: '16/9', objectFit: 'cover' }} />
+                  <div key={v.id.videoId} onClick={() => {setSelectedVideo(v); window.scrollTo({top:0, behavior:'smooth'});}} style={{ cursor: 'pointer' }}>
+                    <img src={v.snippet.thumbnails.high.url} style={{ width: '100%', borderRadius: '12px', aspectRatio: '16/9', objectFit: 'cover' }} />
                     <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
                       <div style={{ minWidth: '36px', height: '36px', borderRadius: '50%', background: '#333' }}></div>
                       <div>
-                        <h4 style={{ fontSize: '14px', margin: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{v.title}</h4>
-                        <p style={{ fontSize: '12px', color: '#aaa', marginTop: '5px' }}>{v.uploaderName} • {v.uploadedDate}</p>
+                        <h4 style={{ fontSize: '14px', margin: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{v.snippet.title}</h4>
+                        <p style={{ fontSize: '12px', color: '#aaa', marginTop: '5px' }}>{v.snippet.channelTitle}</p>
                       </div>
                     </div>
                   </div>
