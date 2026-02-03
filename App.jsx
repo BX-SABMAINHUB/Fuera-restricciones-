@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 
 // CONFIGURACIÓN MAESTRA
-const YOUTUBE_API_KEY = "AIzaSyArunxieSU1Ax_AQOaomhmkLecwAr4_DJw";
+const YOUTUBE_API_KEY = "AIzaSyA3-d50SVeDddGXyLiFTITr1MHoP8Nve24";
 const PANIC_URL = "https://faria.managebac.com/login";
 
 /**
  * ALEX HUB ULTRA - FINAL BLINDADA
- * FIX: YOUTUBE EMBED PLAYER & SEARCH
+ * API KEY ACTUALIZADA | YOUTUBE FIX | MULTI-SERVER MOVIES | XBOX BYPASS
  */
 
 export default function AlexHubUltra() {
@@ -47,7 +47,7 @@ export default function AlexHubUltra() {
     }
   };
 
-  // --- SISTEMA DE PELÍCULAS ---
+  // --- SISTEMA DE PELÍCULAS (ANTI-404) ---
   const movieServers = [
     { name: "Server Alpha", url: (q) => `https://vidsrc.to/v2/embed/movie/${encodeURIComponent(q)}` },
     { name: "Server Beta", url: (q) => `https://vidsrc.me/embed/movie?tmdb=${encodeURIComponent(q)}` },
@@ -55,24 +55,30 @@ export default function AlexHubUltra() {
     { name: "Buscador Directo", url: (q) => `https://www.google.com/search?q=${encodeURIComponent(q)}+pelicula+completa+online&igu=1` }
   ];
 
-  // --- BUSCADORES ---
+  // --- BUSCADOR YOUTUBE REPARADO ---
   const performSearch = async (e) => {
     if (e) e.preventDefault();
     if (!query) return;
+    
     setLoading(true);
 
     if (mode === 'youtube') {
       try {
-        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=20&q=${encodeURIComponent(query)}&type=video&key=${YOUTUBE_API_KEY}`);
+        const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=20&q=${encodeURIComponent(query)}&type=video&key=${YOUTUBE_API_KEY}`;
+        const res = await fetch(url);
         const data = await res.json();
+        
         if (data.items) {
           setVideos(data.items);
-          setSelectedVideo(null);
+          setSelectedVideo(null); // Resetea el video actual al buscar uno nuevo
+        } else if (data.error) {
+          alert("Error de API: " + data.error.message);
         }
       } catch (err) { 
-        alert("Error en YouTube: Verifica tu cuota de API Key"); 
+        alert("Error de conexión con YouTube"); 
       }
-    }
+    } 
+    // Los otros modos (Twitch/Movies) funcionan por el cambio de estado de query
     setLoading(false);
   };
 
@@ -99,6 +105,7 @@ export default function AlexHubUltra() {
 
   return (
     <div style={styles.appContainer}>
+      {/* NAVBAR */}
       <nav style={styles.navbar}>
         <div style={styles.navLeft}>
           <div style={styles.logoBox}>
@@ -106,17 +113,17 @@ export default function AlexHubUltra() {
             <span style={styles.logoSub}>HUB ULTRA</span>
           </div>
           <div style={styles.tabContainer}>
-            <button onClick={() => setMode('youtube')} style={mode === 'youtube' ? styles.activeTab : styles.tab}>YouTube</button>
-            <button onClick={() => setMode('twitch')} style={mode === 'twitch' ? styles.activeTab : styles.tab}>Twitch</button>
-            <button onClick={() => setMode('movies')} style={mode === 'movies' ? styles.activeTab : styles.tab}>Películas</button>
-            <button onClick={() => setMode('xbox')} style={mode === 'xbox' ? styles.activeTab : styles.tab}>Xbox</button>
+            <button onClick={() => {setMode('youtube'); setSelectedVideo(null);}} style={mode === 'youtube' ? styles.activeTab : styles.tab}>YouTube</button>
+            <button onClick={() => {setMode('twitch'); setSelectedVideo(null);}} style={mode === 'twitch' ? styles.activeTab : styles.tab}>Twitch</button>
+            <button onClick={() => {setMode('movies'); setSelectedVideo(null);}} style={mode === 'movies' ? styles.activeTab : styles.tab}>Películas</button>
+            <button onClick={() => {setMode('xbox'); setSelectedVideo(null);}} style={mode === 'xbox' ? styles.activeTab : styles.tab}>Xbox</button>
           </div>
         </div>
 
         <form onSubmit={performSearch} style={styles.searchForm}>
           <input 
             style={styles.searchInput} 
-            placeholder={mode === 'movies' ? "Nombre de película..." : "Buscar contenido..."}
+            placeholder={mode === 'movies' ? "Nombre de película..." : mode === 'twitch' ? "Nombre del canal..." : "Buscar..."}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -125,26 +132,25 @@ export default function AlexHubUltra() {
         <button onClick={() => window.location.href = PANIC_URL} style={styles.panicButton}>PÁNICO</button>
       </nav>
 
+      {/* ÁREA DE CONTENIDO */}
       <main style={styles.contentArea}>
         {mode === 'youtube' && (
           <div style={styles.grid}>
             {selectedVideo ? (
               <div style={styles.playerWrapper}>
                 <iframe 
-                  src={`https://www.youtube-nocookie.com/embed/${selectedVideo}?autoplay=1&rel=0&modestbranding=1`} 
+                  src={`https://www.youtube-nocookie.com/embed/${selectedVideo}?autoplay=1`} 
                   style={styles.fullIframe} 
-                  allow="autoplay; encrypted-media; fullscreen"
                   allowFullScreen 
                 />
-                <button onClick={() => setSelectedVideo(null)} style={styles.closeButton}>CERRAR VIDEO</button>
+                <button onClick={() => setSelectedVideo(null)} style={styles.closeButton}>VOLVER</button>
               </div>
             ) : (
               videos.map((v, i) => (
-                <div key={v.id.videoId || i} style={styles.card} onClick={() => setSelectedVideo(v.id.videoId)}>
-                  <img src={v.snippet.thumbnails.high.url} style={styles.thumbnail} alt="thumb" />
+                <div key={i} style={styles.card} onClick={() => setSelectedVideo(v.id.videoId)}>
+                  <img src={v.snippet.thumbnails.high.url} style={styles.thumbnail} alt="preview" />
                   <div style={styles.cardInfo}>
                     <p style={styles.videoTitle}>{v.snippet.title}</p>
-                    <p style={{fontSize: '11px', color: '#555'}}>{v.snippet.channelTitle}</p>
                   </div>
                 </div>
               ))
@@ -213,7 +219,6 @@ const styles = {
   glitchText: { color: '#fff', fontSize: '24px', letterSpacing: '5px', marginBottom: '30px' },
   loginInput: { background: '#000', border: '1px solid #E50914', color: '#fff', padding: '15px', borderRadius: '10px', width: '250px', fontSize: '20px', textAlign: 'center', outline: 'none' },
   loginButton: { display: 'block', width: '100%', marginTop: '20px', padding: '15px', background: '#E50914', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
-  
   appContainer: { background: '#050505', height: '100vh', display: 'flex', flexDirection: 'column', color: '#fff' },
   navbar: { height: '70px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 30px', borderBottom: '1px solid #1a1a1a' },
   navLeft: { display: 'flex', alignItems: 'center', gap: '30px' },
@@ -226,23 +231,19 @@ const styles = {
   searchForm: { flex: 1, maxWidth: '400px', margin: '0 20px' },
   searchInput: { width: '100%', background: '#111', border: '1px solid #333', color: '#fff', padding: '10px 20px', borderRadius: '20px', outline: 'none' },
   panicButton: { background: '#E50914', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
-  
   contentArea: { flex: 1, overflowY: 'auto', padding: '20px' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' },
   card: { background: '#0a0a0a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #1a1a1a', cursor: 'pointer' },
   thumbnail: { width: '100%', aspectRatio: '16/9', objectFit: 'cover' },
   cardInfo: { padding: '12px' },
-  videoTitle: { fontSize: '13px', fontWeight: 'bold', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical' },
-  
+  videoTitle: { fontSize: '13px', fontWeight: 'bold' },
   playerWrapper: { gridColumn: '1/-1', height: '75vh', position: 'relative' },
   fullIframe: { width: '100%', height: '100%', border: 'none', borderRadius: '15px' },
-  closeButton: { position: 'absolute', top: '-45px', right: 0, background: '#333', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: '5px', cursor: 'pointer' },
-  
+  closeButton: { position: 'absolute', top: '-40px', right: 0, background: '#E50914', color: '#fff', border: 'none', padding: '5px 15px', borderRadius: '5px' },
   movieContainer: { height: '100%', display: 'flex', flexDirection: 'column' },
   serverBar: { display: 'flex', gap: '8px', marginBottom: '15px' },
   serverBtn: { background: '#111', color: '#555', border: '1px solid #222', padding: '6px 12px', borderRadius: '5px', fontSize: '12px' },
   serverBtnActive: { background: '#E50914', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '5px' },
-  
   fullView: { height: '100%' },
   emptyState: { display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#333' },
   footer: { height: '30px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', fontSize: '10px', color: '#333' }
