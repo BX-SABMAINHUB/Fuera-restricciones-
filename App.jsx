@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 // CONFIGURACIÓN MAESTRA
-const YOUTUBE_API_KEY = "AIzaSyDHJQh5IKV5a_F4Y5xmj4yswLDns5cmpWA";
+const YOUTUBE_API_KEY = "AIzaSyCCw9ZJj79A-eCb92vtampviKGrZhwpjtk";
 const PANIC_URL = "https://faria.managebac.com/login";
 
 export default function AlexHubUltra() {
