@@ -13,9 +13,7 @@ export default function App() {
   // SISTEMA DE PÁNICO (MANAGEBAC)
   const activatePanic = () => {
     document.title = "ManageBac | Dashboard";
-    // Intenta abrir la app
     window.location.href = "managebac://";
-    // Fallback a web
     setTimeout(() => { window.location.href = "https://faria.managebac.com/login"; }, 300);
   };
 
@@ -51,27 +49,30 @@ export default function App() {
     localStorage.setItem('search_hist', JSON.stringify(newHist));
   };
 
-  // Lógica de colores dinámicos
   const getThemeColor = () => {
     if (mode === 'youtube') return '#FF0000';
     if (mode === 'twitch') return '#9146FF';
-    if (mode === 'xbox') return '#107C10'; // Xbox Green
+    if (mode === 'xbox') return '#107C10'; 
     return '#fff';
   };
   const mainColor = getThemeColor();
 
+  // URL DE XBOX CON BYPASS (GOOGLE BRIDGE)
+  // Usamos el traductor como proxy para eliminar las cabeceras de seguridad que ponen la pantalla negra
+  const xboxUrl = "https://www.xbox.com/es-ES/games/store/fortnite/BT5P2X999VH2/0001/9R22LC29Q28T";
+  const xboxBypassUrl = `https://translate.google.com/translate?sl=auto&tl=es&u=${encodeURIComponent(xboxUrl)}&client=webapp`;
+
   return (
     <div style={{ background: '#080808', color: '#fff', minHeight: '100vh', fontFamily: 'Inter, -apple-system, sans-serif', transition: 'background 0.5s' }}>
       
-      {/* NAVBAR GLASSMORPHISM */}
+      {/* NAVBAR */}
       <nav style={{ 
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
         padding: '0 30px', height: '80px', position: 'sticky', top: 0, zIndex: 1000,
-        background: 'rgba(12, 12, 12, 0.8)', backdropFilter: 'blur(20px)',
+        background: 'rgba(12, 12, 12, 0.85)', backdropFilter: 'blur(20px)',
         borderBottom: `1px solid ${mainColor}33`, transition: 'border-color 0.3s'
       }}>
         
-        {/* LOGO */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '25px' }}>
           <div onClick={() => {setSelected(null); setQuery('');}} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
             <div style={{ 
@@ -91,7 +92,6 @@ export default function App() {
             </div>
           </div>
           
-          {/* SELECTOR DE PLATAFORMA */}
           <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '16px', padding: '5px', gap: '5px' }}>
             {['youtube', 'twitch', 'xbox'].map((m) => (
               <button 
@@ -116,9 +116,8 @@ export default function App() {
           </div>
         </div>
 
-        {/* BUSCADOR (Solo visible en YT y Twitch) */}
         {mode !== 'xbox' && (
-          <form onSubmit={handleSearch} style={{ flex: 1, maxWidth: '500px', margin: '0 40px', position: 'relative' }}>
+          <form onSubmit={handleSearch} style={{ flex: 1, maxWidth: '500px', margin: '0 40px' }}>
             <input 
               style={{ 
                 width: '100%', background: 'rgba(255,255,255,0.05)', border: `1px solid rgba(255,255,255,0.1)`, 
@@ -148,39 +147,39 @@ export default function App() {
 
       <main style={{ padding: '30px', height: 'calc(100vh - 80px)', overflowY: 'auto' }}>
         
-        {/* MODO XBOX (FORTNITE FRAME) */}
+        {/* MODO XBOX CON GOOGLE BRIDGE */}
         {mode === 'xbox' && (
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column', animation: 'fadeIn 0.5s' }}>
             <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
-              <h2 style={{ margin: 0, textShadow: `0 0 20px ${mainColor}` }}>Xbox Cloud Gaming</h2>
-              <span style={{ background: '#222', padding: '5px 10px', borderRadius: '8px', fontSize: '12px', color: '#aaa' }}>Anti-Lazarus Enabled</span>
+              <h2 style={{ margin: 0, textShadow: `0 0 20px ${mainColor}` }}>Xbox Store: Fortnite</h2>
+              <div style={{ background: '#107C10', padding: '5px 10px', borderRadius: '8px', fontSize: '12px', color: '#fff', fontWeight: 'bold' }}>
+                 ✓ Google Bridge Activado
+              </div>
             </div>
             
-            <div style={{ flex: 1, background: '#101010', borderRadius: '24px', overflow: 'hidden', border: `1px solid ${mainColor}44`, position: 'relative' }}>
+            <div style={{ flex: 1, background: '#fff', borderRadius: '24px', overflow: 'hidden', border: `1px solid ${mainColor}44`, position: 'relative' }}>
+              {/* IFRAME CON EL BYPASS DE TRADUCTOR */}
               <iframe 
-                src="https://www.xbox.com/es-ES/games/store/fortnite/BT5P2X999VH2/0001/9R22LC29Q28T" 
-                style={{ width: '100%', height: '100%', border: 'none' }}
+                src={xboxBypassUrl} 
+                style={{ width: '100%', height: '110%', border: 'none', marginTop: '-50px' }} // Margen negativo para ocultar la barra de Google
                 allow="autoplay; gamepad; microphone; camera; fullscreen"
-                // Sandbox avanzado para permitir ejecución de scripts de Xbox sin exponer la URL principal
                 sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-pointer-lock allow-presentation"
-                title="Xbox Frame"
+                title="Xbox Fortnite Store"
               />
               
-              {/* Overlay de carga por si la web tarda */}
               <div style={{ position: 'absolute', bottom: '20px', right: '20px', pointerEvents: 'none' }}>
-                <div style={{ background: 'rgba(0,0,0,0.7)', padding: '10px 20px', borderRadius: '20px', backdropFilter: 'blur(10px)', border: '1px solid #333' }}>
-                  <span style={{fontSize: '12px', color: '#107C10'}}>●</span> Conectado a Microsoft Store
+                <div style={{ background: 'rgba(0,0,0,0.8)', padding: '10px 20px', borderRadius: '20px', backdropFilter: 'blur(10px)', border: '1px solid #333' }}>
+                  <span style={{fontSize: '12px', color: '#107C10'}}>●</span> Enlace Seguro Cargado
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* REPRODUCTOR YOUTUBE/TWITCH */}
-        {selected ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', animation: 'scaleIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}>
+        {/* RESTO DE MODOS (YOUTUBE / TWITCH) */}
+        {selected && mode !== 'xbox' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', animation: 'scaleIn 0.4s' }}>
             <div style={{ position: 'relative', width: '100%', maxWidth: '1200px' }}>
-              <div style={{ position: 'absolute', width: '100%', height: '100%', background: mainColor, filter: 'blur(120px)', opacity: 0.1, zIndex: -1 }}></div>
               <div style={{ position: 'relative', paddingTop: '56.25%', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 40px 80px rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
                 <iframe 
                   src={selected} 
@@ -188,11 +187,10 @@ export default function App() {
                   allowFullScreen allow="autoplay"
                 />
               </div>
-              <button onClick={() => setSelected(null)} style={{ marginTop: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '12px 30px', borderRadius: '14px', cursor: 'pointer', fontWeight: 'bold', backdropFilter: 'blur(10px)' }}>Cerrar</button>
+              <button onClick={() => setSelected(null)} style={{ marginTop: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '12px 30px', borderRadius: '14px', cursor: 'pointer', fontWeight: 'bold' }}>Cerrar</button>
             </div>
           </div>
         ) : mode !== 'xbox' && (
-          /* GRID DE CONTENIDO */
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '30px' }}>
               {loading && [1,2,3,4].map(n => <div key={n} style={{ height: '220px', background: '#111', borderRadius: '20px', animation: 'pulse 1.5s infinite' }}></div>)}
@@ -216,7 +214,7 @@ export default function App() {
               <div style={{ textAlign: 'center', marginTop: '15vh', opacity: 0.8 }}>
                 <div style={{ fontSize: '80px', marginBottom: '20px', filter: 'drop-shadow(0 0 30px #9146FF)' }}>👾</div>
                 <h2>Twitch Stream Injector</h2>
-                <p style={{ color: '#888' }}>Escribe el canal arriba para inyectar la señal en vivo.</p>
+                <p style={{ color: '#888' }}>Escribe el canal arriba para inyectar la señal.</p>
               </div>
             )}
           </div>
