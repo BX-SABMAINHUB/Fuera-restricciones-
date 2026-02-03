@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 // CONFIGURACIÓN MAESTRA
-const YOUTUBE_API_KEY = "AIzaSyA3-d50SVeDddGXyLiFTITr1MHoP8Nve24";
+const YOUTUBE_API_KEY = "AIzaSyDHJQh5IKV5a_F4Y5xmj4yswLDns5cmpWA";
 const PANIC_URL = "https://faria.managebac.com/login";
 
 /**
