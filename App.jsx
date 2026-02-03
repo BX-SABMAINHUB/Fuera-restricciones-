@@ -1,26 +1,25 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // CONFIGURACIÓN MAESTRA
 const YOUTUBE_API_KEY = "AIzaSyArunxieSU1Ax_AQOaomhmkLecwAr4_DJw";
 const PANIC_URL = "https://faria.managebac.com/login";
 
 /**
- * ALEX HUB ULTRA - VERSIÓN DEFENSIVA V4.0
- * Bloqueo de Lazarus / Sincronización de Clave / Multi-Streaming
+ * ALEX HUB ULTRA - FINAL BLINDADA
+ * FIX: YOUTUBE EMBED PLAYER & SEARCH
  */
 
 export default function AlexHubUltra() {
   const [authorized, setAuthorized] = useState(false);
   const [password, setPassword] = useState('');
-  const [mode, setMode] = useState('youtube'); // youtube, twitch, movies, xbox, settings
+  const [mode, setMode] = useState('youtube'); 
   const [query, setQuery] = useState('');
   const [videos, setVideos] = useState([]);
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [movieSource, setMovieSource] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [history, setHistory] = useState([]);
 
-  // --- LÓGICA DE SEGURIDAD (SINCRONIZADA CON GITHUB) ---
+  // --- LÓGICA DE SEGURIDAD (SINCRONIZADA CON TU GITHUB) ---
   const generateCurrentToken = () => {
     const now = new Date();
     const seed = now.getFullYear().toString() + (now.getMonth() + 1).toString() + now.getDate().toString() + now.getHours().toString();
@@ -42,62 +41,57 @@ export default function AlexHubUltra() {
     e.preventDefault();
     if (password === generateCurrentToken()) {
       setAuthorized(true);
-      saveLog("Acceso concedido");
     } else {
       alert("TOKEN INVÁLIDO. Revisa bx-sabmainhub.github.io/alex-codes/");
       setPassword('');
     }
   };
 
-  // --- SISTEMA DE PELÍCULAS (ANTI-404) ---
+  // --- SISTEMA DE PELÍCULAS ---
   const movieServers = [
-    { name: "Server Alpha (VidSrc)", url: (q) => `https://vidsrc.to/v2/embed/movie/${encodeURIComponent(q)}` },
-    { name: "Server Beta (Vidsrc.me)", url: (q) => `https://vidsrc.me/embed/movie?tmdb=${encodeURIComponent(q)}` },
-    { name: "Server Gamma (Embed.su)", url: (q) => `https://embed.su/embed/movie/${encodeURIComponent(q)}` },
-    { name: "Explorador Libre", url: (q) => `https://www.google.com/search?q=${encodeURIComponent(q)}+watch+online+free&igu=1` }
+    { name: "Server Alpha", url: (q) => `https://vidsrc.to/v2/embed/movie/${encodeURIComponent(q)}` },
+    { name: "Server Beta", url: (q) => `https://vidsrc.me/embed/movie?tmdb=${encodeURIComponent(q)}` },
+    { name: "Server Gamma", url: (q) => `https://embed.su/embed/movie/${encodeURIComponent(q)}` },
+    { name: "Buscador Directo", url: (q) => `https://www.google.com/search?q=${encodeURIComponent(q)}+pelicula+completa+online&igu=1` }
   ];
 
   // --- BUSCADORES ---
   const performSearch = async (e) => {
     if (e) e.preventDefault();
+    if (!query) return;
     setLoading(true);
-    saveLog(`Búsqueda en ${mode}: ${query}`);
 
     if (mode === 'youtube') {
       try {
         const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=20&q=${encodeURIComponent(query)}&type=video&key=${YOUTUBE_API_KEY}`);
         const data = await res.json();
-        setVideos(data.items || []);
-      } catch (err) { alert("Error en API de YouTube"); }
-    } 
+        if (data.items) {
+          setVideos(data.items);
+          setSelectedVideo(null);
+        }
+      } catch (err) { 
+        alert("Error en YouTube: Verifica tu cuota de API Key"); 
+      }
+    }
     setLoading(false);
   };
 
-  const saveLog = (msg) => {
-    const time = new Date().toLocaleTimeString();
-    setHistory(prev => [`[${time}] ${msg}`, ...prev].slice(0, 5));
-  };
-
-  // --- COMPONENTES DE INTERFAZ ---
   if (!authorized) {
     return (
       <div style={styles.loginPage}>
         <div style={styles.loginCard}>
           <h1 style={styles.glitchText}>ALEX HUB <span style={{color: '#E50914'}}>ULTRA</span></h1>
-          <p style={{color: '#666', marginBottom: '20px'}}>Sistema de Encriptación de Sesión Activo</p>
           <form onSubmit={handleLogin}>
             <input 
               type="text" 
-              placeholder="ENTER 6-DIGIT TOKEN" 
+              placeholder="TOKEN DE 6 DÍGITOS" 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               style={styles.loginInput}
             />
-            <button type="submit" style={styles.loginButton}>DESBLOQUEAR NÚCLEO</button>
+            <button type="submit" style={styles.loginButton}>ENTRAR AL NÚCLEO</button>
           </form>
-          <div style={{marginTop: '20px', fontSize: '10px', color: '#333'}}>
-            Sincronizado con: bx-sabmainhub.github.io
-          </div>
+          <p style={{marginTop: '20px', color: '#444', fontSize: '11px'}}>Verifica el código en tu GitHub Pages</p>
         </div>
       </div>
     );
@@ -105,7 +99,6 @@ export default function AlexHubUltra() {
 
   return (
     <div style={styles.appContainer}>
-      {/* HEADER DINÁMICO */}
       <nav style={styles.navbar}>
         <div style={styles.navLeft}>
           <div style={styles.logoBox}>
@@ -132,26 +125,26 @@ export default function AlexHubUltra() {
         <button onClick={() => window.location.href = PANIC_URL} style={styles.panicButton}>PÁNICO</button>
       </nav>
 
-      {/* ÁREA DE CONTENIDO */}
       <main style={styles.contentArea}>
         {mode === 'youtube' && (
           <div style={styles.grid}>
             {selectedVideo ? (
               <div style={styles.playerWrapper}>
                 <iframe 
-                  src={`https://www.youtube-nocookie.com/embed/${selectedVideo}?autoplay=1`} 
+                  src={`https://www.youtube-nocookie.com/embed/${selectedVideo}?autoplay=1&rel=0&modestbranding=1`} 
                   style={styles.fullIframe} 
+                  allow="autoplay; encrypted-media; fullscreen"
                   allowFullScreen 
                 />
-                <button onClick={() => setSelectedVideo(null)} style={styles.closeButton}>VOLVER AL GRID</button>
+                <button onClick={() => setSelectedVideo(null)} style={styles.closeButton}>CERRAR VIDEO</button>
               </div>
             ) : (
               videos.map((v, i) => (
-                <div key={i} style={styles.card} onClick={() => setSelectedVideo(v.id.videoId)}>
+                <div key={v.id.videoId || i} style={styles.card} onClick={() => setSelectedVideo(v.id.videoId)}>
                   <img src={v.snippet.thumbnails.high.url} style={styles.thumbnail} alt="thumb" />
                   <div style={styles.cardInfo}>
                     <p style={styles.videoTitle}>{v.snippet.title}</p>
-                    <p style={styles.channelName}>{v.snippet.channelTitle}</p>
+                    <p style={{fontSize: '11px', color: '#555'}}>{v.snippet.channelTitle}</p>
                   </div>
                 </div>
               ))
@@ -163,11 +156,7 @@ export default function AlexHubUltra() {
           <div style={styles.movieContainer}>
             <div style={styles.serverBar}>
               {movieServers.map((s, i) => (
-                <button 
-                  key={i} 
-                  onClick={() => setMovieSource(i)} 
-                  style={movieSource === i ? styles.serverBtnActive : styles.serverBtn}
-                >
+                <button key={i} onClick={() => setMovieSource(i)} style={movieSource === i ? styles.serverBtnActive : styles.serverBtn}>
                   {s.name}
                 </button>
               ))}
@@ -180,17 +169,13 @@ export default function AlexHubUltra() {
                 sandbox="allow-forms allow-scripts allow-same-origin allow-pointer-lock"
               />
             ) : (
-              <div style={styles.emptyState}>
-                <h2>🎬 Buscador de Cine Pro</h2>
-                <p>Escribe el nombre de una película en la barra superior para empezar.</p>
-                <div style={styles.movieHint}>Tip: Si un servidor da 404, cambia al siguiente en la barra superior.</div>
-              </div>
+              <div style={styles.emptyState}>🎬 Escribe una película arriba y pulsa Enter.</div>
             )}
           </div>
         )}
 
         {mode === 'twitch' && (
-          <div style={styles.twitchContainer}>
+          <div style={styles.fullView}>
              {query ? (
                <iframe 
                 src={`https://player.twitch.tv/?channel=${query.toLowerCase()}&parent=${window.location.hostname}`}
@@ -198,17 +183,13 @@ export default function AlexHubUltra() {
                 allowFullScreen
                />
              ) : (
-               <div style={styles.emptyState}>Escribe el nombre de un Streamer para conectar.</div>
+               <div style={styles.emptyState}>Escribe un canal de Twitch arriba.</div>
              )}
           </div>
         )}
 
         {mode === 'xbox' && (
-          <div style={styles.xboxContainer}>
-            <div style={styles.xboxHeader}>
-              <span style={styles.xboxBadge}>Anti-Lazarus Tunnel Active</span>
-              <p>Microsoft Cloud Gaming (Sandboxed)</p>
-            </div>
+          <div style={styles.fullView}>
             <iframe 
               src="https://www.bing.com/search?q=site:xbox.com+fortnite+play+now&igu=1" 
               style={styles.fullIframe}
@@ -218,68 +199,51 @@ export default function AlexHubUltra() {
         )}
       </main>
 
-      {/* BARRA DE ESTADO INFERIOR */}
       <footer style={styles.footer}>
-        <div style={styles.logTerminal}>
-          {history.map((log, i) => <div key={i}>{log}</div>)}
-        </div>
-        <div style={styles.statusInfo}>
-          🟢 Conectado a Mainframe | Clave Activa: {generateCurrentToken()}
-        </div>
+        <span>MODO: {mode.toUpperCase()}</span>
+        <span>TOKEN ACTIVO: {generateCurrentToken()}</span>
       </footer>
     </div>
   );
 }
 
-// --- SISTEMA DE ESTILOS (PRO) ---
 const styles = {
   loginPage: { background: '#000', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' },
-  loginCard: { background: '#0a0a0a', padding: '50px', borderRadius: '30px', border: '1px solid #222', textAlign: 'center', width: '400px' },
-  glitchText: { color: '#fff', fontSize: '28px', letterSpacing: '5px', marginBottom: '10px' },
-  loginInput: { background: '#000', border: '1px solid #E50914', color: '#fff', padding: '15px', borderRadius: '10px', width: '100%', fontSize: '20px', textAlign: 'center', marginBottom: '20px', outline: 'none' },
-  loginButton: { width: '100%', padding: '15px', background: '#E50914', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
+  loginCard: { background: '#0a0a0a', padding: '50px', borderRadius: '30px', border: '1px solid #222', textAlign: 'center' },
+  glitchText: { color: '#fff', fontSize: '24px', letterSpacing: '5px', marginBottom: '30px' },
+  loginInput: { background: '#000', border: '1px solid #E50914', color: '#fff', padding: '15px', borderRadius: '10px', width: '250px', fontSize: '20px', textAlign: 'center', outline: 'none' },
+  loginButton: { display: 'block', width: '100%', marginTop: '20px', padding: '15px', background: '#E50914', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
   
-  appContainer: { background: '#050505', height: '100vh', display: 'flex', flexDirection: 'column', color: '#fff', fontFamily: 'sans-serif' },
+  appContainer: { background: '#050505', height: '100vh', display: 'flex', flexDirection: 'column', color: '#fff' },
   navbar: { height: '70px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 30px', borderBottom: '1px solid #1a1a1a' },
-  navLeft: { display: 'flex', alignItems: 'center', gap: '40px' },
+  navLeft: { display: 'flex', alignItems: 'center', gap: '30px' },
   logoBox: { display: 'flex', flexDirection: 'column' },
-  logoMain: { fontSize: '20px', fontWeight: 'bold', letterSpacing: '2px' },
-  logoSub: { fontSize: '10px', color: '#107C10', fontWeight: 'bold' },
+  logoMain: { fontSize: '18px', fontWeight: 'bold' },
+  logoSub: { fontSize: '9px', color: '#107C10' },
+  tabContainer: { display: 'flex', background: '#111', borderRadius: '10px', padding: '3px' },
+  tab: { background: 'none', border: 'none', color: '#666', padding: '8px 15px', cursor: 'pointer' },
+  activeTab: { background: '#222', border: 'none', color: '#fff', padding: '8px 15px', borderRadius: '8px', fontWeight: 'bold' },
+  searchForm: { flex: 1, maxWidth: '400px', margin: '0 20px' },
+  searchInput: { width: '100%', background: '#111', border: '1px solid #333', color: '#fff', padding: '10px 20px', borderRadius: '20px', outline: 'none' },
+  panicButton: { background: '#E50914', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
   
-  tabContainer: { display: 'flex', background: '#111', borderRadius: '12px', padding: '4px' },
-  tab: { background: 'none', border: 'none', color: '#888', padding: '8px 20px', cursor: 'pointer', borderRadius: '8px', transition: '0.3s' },
-  activeTab: { background: '#222', border: 'none', color: '#fff', padding: '8px 20px', borderRadius: '8px', fontWeight: 'bold' },
-  
-  searchForm: { flex: 1, maxWidth: '500px', margin: '0 40px' },
-  searchInput: { width: '100%', background: '#111', border: '1px solid #333', color: '#fff', padding: '10px 20px', borderRadius: '25px', outline: 'none' },
-  
-  panicButton: { background: 'linear-gradient(45deg, #ff0000, #b30000)', color: '#fff', border: 'none', padding: '10px 25px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 15px rgba(255,0,0,0.3)' },
-  
-  contentArea: { flex: 1, overflowY: 'auto', padding: '20px', position: 'relative' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '25px' },
-  card: { background: '#0a0a0a', borderRadius: '15px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #1a1a1a', transition: '0.3s' },
+  contentArea: { flex: 1, overflowY: 'auto', padding: '20px' },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' },
+  card: { background: '#0a0a0a', borderRadius: '12px', overflow: 'hidden', border: '1px solid #1a1a1a', cursor: 'pointer' },
   thumbnail: { width: '100%', aspectRatio: '16/9', objectFit: 'cover' },
-  cardInfo: { padding: '15px' },
-  videoTitle: { fontSize: '14px', fontWeight: 'bold', marginBottom: '5px' },
-  channelName: { fontSize: '12px', color: '#666' },
+  cardInfo: { padding: '12px' },
+  videoTitle: { fontSize: '13px', fontWeight: 'bold', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical' },
   
-  playerWrapper: { gridColumn: '1/-1', position: 'relative', width: '100%', height: '80vh' },
-  fullIframe: { width: '100%', height: '100%', border: 'none', borderRadius: '20px' },
-  closeButton: { position: 'absolute', bottom: '-50px', left: '0', background: '#222', color: '#fff', border: 'none', padding: '10px 30px', borderRadius: '10px', cursor: 'pointer' },
+  playerWrapper: { gridColumn: '1/-1', height: '75vh', position: 'relative' },
+  fullIframe: { width: '100%', height: '100%', border: 'none', borderRadius: '15px' },
+  closeButton: { position: 'absolute', top: '-45px', right: 0, background: '#333', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: '5px', cursor: 'pointer' },
   
   movieContainer: { height: '100%', display: 'flex', flexDirection: 'column' },
-  serverBar: { display: 'flex', gap: '10px', marginBottom: '20px' },
-  serverBtn: { background: '#111', color: '#888', border: '1px solid #333', padding: '8px 15px', borderRadius: '8px', cursor: 'pointer' },
-  serverBtnActive: { background: '#E50914', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '8px', fontWeight: 'bold' },
+  serverBar: { display: 'flex', gap: '8px', marginBottom: '15px' },
+  serverBtn: { background: '#111', color: '#555', border: '1px solid #222', padding: '6px 12px', borderRadius: '5px', fontSize: '12px' },
+  serverBtnActive: { background: '#E50914', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '5px' },
   
-  emptyState: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#444' },
-  movieHint: { marginTop: '20px', fontStyle: 'italic', fontSize: '13px' },
-  
-  xboxContainer: { height: '100%', display: 'flex', flexDirection: 'column' },
-  xboxHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', padding: '10px', background: '#107C10', borderRadius: '10px' },
-  xboxBadge: { background: '#000', padding: '4px 10px', borderRadius: '5px', fontSize: '12px', fontWeight: 'bold' },
-  
-  footer: { height: '40px', background: '#000', borderTop: '1px solid #111', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', fontSize: '11px' },
-  logTerminal: { color: '#0dff00', fontFamily: 'monospace' },
-  statusInfo: { color: '#444' }
+  fullView: { height: '100%' },
+  emptyState: { display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#333' },
+  footer: { height: '30px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', fontSize: '10px', color: '#333' }
 };
