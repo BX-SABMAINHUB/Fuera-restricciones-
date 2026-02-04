@@ -1,11 +1,28 @@
 import React, { useState, useEffect } from 'react';
+// IMPORTAMOS FIREBASE DESDE LA RED (CDN)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+// --- TU CONFIGURACIÓN REAL DE FIREBASE ---
+const firebaseConfig = {
+  apiKey: "AIzaSyD1zUmhiUVDv-ZYyJF7vTwGaS1AO9t9jiE",
+  authDomain: "alexhub-eefdf.firebaseapp.com",
+  databaseURL: "https://alexhub-eefdf-default-rtdb.firebaseio.com",
+  projectId: "alexhub-eefdf",
+  storageBucket: "alexhub-eefdf.firebasestorage.app",
+  messagingSenderId: "463204402982",
+  appId: "1:463204402982:web:fe740a662fbfd50452a3e7",
+  measurementId: "G-M8KSGN3WX9"
+};
+
+// Inicializamos Firebase
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const usersRef = ref(db, 'premium_users');
 
 // CONFIGURACIÓN MAESTRA
 const YOUTUBE_API_KEY = "AIzaSyCCw9ZJj79A-eCb92vtampviKGrZhwpjtk";
 const PANIC_URL = "https://faria.managebac.com/login";
-
-// URL DE LA NUBE GLOBAL (Donde se guardan los nombres para todos)
-const GLOBAL_DB_URL = "https://kvstore.com/api/collections/alexhub/items/premium_users";
 
 export default function AlexHubUltra() {
   const [authorized, setAuthorized] = useState(false);
@@ -21,42 +38,24 @@ export default function AlexHubUltra() {
   const [puMode, setPuMode] = useState('closed'); 
   const [puCode, setPuCode] = useState('');
   
-  // --- LÓGICA DE SINCRONIZACIÓN GLOBAL ---
+  // --- LÓGICA DE SINCRONIZACIÓN REALTIME CON GOOGLE ---
   const [premiumUsers, setPremiumUsers] = useState([]);
   const [newPuName, setNewPuName] = useState('');
 
-  // 1. FUNCIÓN PARA CARGAR DESDE LA NUBE
-  const loadGlobalUsers = async () => {
-    try {
-      const res = await fetch('https://api.jsonbin.io/v3/b/657b28291f567741c6749961/latest', {
-        headers: { 'X-Master-Key': '$2a$10$W2iXpD3/1S.K8T6yUe6G..5fI.1p9JzD0H1ZfR3n9kX5.yGvG' } // Llave de acceso público
-      });
-      const data = await res.json();
-      if (data.record) setPremiumUsers(data.record);
-    } catch (e) { console.log("Error cargando base de datos global"); }
-  };
-
-  // 2. FUNCIÓN PARA GUARDAR EN LA NUBE (Para todos)
-  const saveGlobalUsers = async (newList) => {
-    setPremiumUsers(newList); // Actualiza tu pantalla rápido
-    try {
-      await fetch('https://api.jsonbin.io/v3/b/657b28291f567741c6749961', {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-Master-Key': '$2a$10$W2iXpD3/1S.K8T6yUe6G..5fI.1p9JzD0H1ZfR3n9kX5.yGvG' 
-        },
-        body: JSON.stringify(newList)
-      });
-    } catch (e) { alert("Error al sincronizar con la nube"); }
-  };
-
-  // Al iniciar, carga los usuarios y revisa cambios cada 10 segundos
+  // 1. ESCUCHAR CAMBIOS EN TIEMPO REAL (GOOGLE CLOUD)
   useEffect(() => {
-    loadGlobalUsers();
-    const interval = setInterval(loadGlobalUsers, 10000); // Sincronización automática
-    return () => clearInterval(interval);
+    // onValue mantiene una conexión abierta: si alguien cambia la DB, React se entera al instante
+    const unsubscribe = onValue(usersRef, (snapshot) => {
+      const data = snapshot.val();
+      setPremiumUsers(data || []);
+    });
+    return () => unsubscribe(); // Limpiar conexión al salir
   }, []);
+
+  // 2. GUARDAR EN GOOGLE FIREBASE
+  const syncWithFirebase = (newList) => {
+    set(usersRef, newList); // Esto lo sube a la nube para todos
+  };
 
   // --- 1. INTELIGENCIA DE RUTA ---
   useEffect(() => {
@@ -102,14 +101,14 @@ export default function AlexHubUltra() {
     e.preventDefault();
     if (newPuName.trim()) {
       const updated = [...premiumUsers, newPuName];
-      saveGlobalUsers(updated); // SUBE A LA NUBE
+      syncWithFirebase(updated); 
       setNewPuName('');
     }
   };
 
   const removePremiumUser = (index) => {
     const updated = premiumUsers.filter((_, i) => i !== index);
-    saveGlobalUsers(updated); // ACTUALIZA LA NUBE
+    syncWithFirebase(updated);
   };
 
   const handleModeChange = (newMode) => {
@@ -135,14 +134,15 @@ export default function AlexHubUltra() {
   };
 
   const openModal = (type) => setModal(type);
+  
   const renderModal = () => {
     if (!modal) return null;
     const info = {
       bx: { t: "About Bx Hub", c: "Sincronización total con redes de bypass escolar. Bx es el núcleo de la red Alex Hub." },
       creator: { t: "About Creator", c: "System Architect: Alex / Alexgaming. Especialista en seguridad y desarrollo de sistemas Ultra." },
-      terms: { t: "Terms & Conditions", c: "Al acceder a esta plataforma, el usuario acepta que: 1. No revelará la URL a personal docente. 2. Alexgaming no se hace responsable de las notas bajas por viciar demasiado. 3. Este software utiliza túneles de encriptación para YouTube y Xbox." },
-      news: { t: "Latest News", c: "V6.0 activa: ¡Sincronización Global de Premium Users añadida!" },
-      help: { t: "Get Help", c: "Si el token no funciona, contacta con Alex o revisa el repositorio." }
+      terms: { t: "Terms & Conditions", c: "Al acceder a esta plataforma, el usuario acepta que: 1. No revelará la URL a personal docente. 2. Alexgaming no se hace responsable de las notas bajas por viciar demasiado. 3. Este software utiliza túneles de encriptación de Google Firebase." },
+      news: { t: "Latest News", c: "V6.5 GOOGLE CLOUD: Sistema Premium Users sincronizado con Google Firebase en tiempo real." },
+      help: { t: "Get Help", c: "Si el token no funciona, revisa que la base de datos de Firebase esté en 'Modo de Prueba'." }
     };
     return (
       <div style={styles.modalBack} onClick={() => setModal(null)}>
@@ -174,9 +174,9 @@ export default function AlexHubUltra() {
       return (
         <div style={styles.modalBack} onClick={() => setPuMode('closed')}>
           <div style={{...styles.modalContent, border: '1px solid #FFD700', maxWidth: '600px'}} onClick={e => e.stopPropagation()}>
-            <h2 style={{color: '#FFD700', letterSpacing: '2px'}}>GESTIÓN GLOBAL (CLOUD)</h2>
+            <h2 style={{color: '#FFD700', letterSpacing: '2px'}}>GOOGLE FIREBASE ADMIN</h2>
             <div style={styles.puListContainer}>
-              {premiumUsers.length === 0 ? <p style={{color: '#555'}}>Cargando usuarios de la nube...</p> : (
+              {premiumUsers.length === 0 ? <p style={{color: '#555'}}>No hay usuarios en la nube de Google.</p> : (
                 premiumUsers.map((user, idx) => (
                   <div key={idx} style={styles.puListItem}>
                     <span style={{color: '#fff', fontWeight: 'bold'}}>{user}</span>
@@ -186,10 +186,10 @@ export default function AlexHubUltra() {
               )}
             </div>
             <form onSubmit={addPremiumUser} style={{marginTop: '20px', display: 'flex', gap: '10px'}}>
-              <input type="text" value={newPuName} onChange={e => setNewPuName(e.target.value)} style={{...styles.loginInput, width: '100%', fontSize: '14px'}} placeholder="Nombre del nuevo usuario..." />
+              <input type="text" value={newPuName} onChange={e => setNewPuName(e.target.value)} style={{...styles.loginInput, width: '100%', fontSize: '14px'}} placeholder="Añadir a Google Cloud..." />
               <button type="submit" style={styles.addBtn}>AÑADIR</button>
             </form>
-            <button onClick={() => setPuMode('closed')} style={{...styles.loginButton, marginTop: '20px', background: '#FFD700', color: '#000'}}>GUARDAR GLOBALMENTE</button>
+            <button onClick={() => setPuMode('closed')} style={{...styles.loginButton, marginTop: '20px', background: '#FFD700', color: '#000'}}>CERRAR PANEL</button>
           </div>
         </div>
       );
@@ -240,7 +240,7 @@ export default function AlexHubUltra() {
       <button onClick={() => openModal('bx')} style={{...styles.miniBtn, bottom: 80, left: 20}}>About Bx</button>
       <button onClick={() => openModal('news')} style={{...styles.miniBtn, bottom: 80, right: 20}}>News</button>
       <button onClick={() => openModal('help')} style={{...styles.miniBtn, top: 90, right: 20}}>Help</button>
-      <button onClick={() => setPuMode('auth')} style={{...styles.miniBtn, bottom: 30, left: 20, borderColor: '#FFD700', color: '#FFD700'}}>PU (CLOUD)</button>
+      <button onClick={() => setPuMode('auth')} style={{...styles.miniBtn, bottom: 30, left: 20, borderColor: '#FFD700', color: '#FFD700'}}>PU (FIREBASE)</button>
 
       <nav style={styles.navbar}>
         <div style={styles.navLeft}>
@@ -298,7 +298,7 @@ export default function AlexHubUltra() {
       </main>
 
       <footer style={styles.footer}>
-        <span>SISTEMA: V6.0 - BY ALEX (CLOUD SYNC ON)</span>
+        <span>SISTEMA: V6.5 - FIREBASE ACTIVE ✅</span>
         <span>TOKEN ACTIVO: {generateCurrentToken()}</span>
       </footer>
       {renderModal()}
@@ -307,7 +307,6 @@ export default function AlexHubUltra() {
   );
 }
 
-// Estilos intactos (Solo añado los de PU por si no estaban)
 const styles = {
   loginPage: { background: '#000', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' },
   loginCard: { background: '#0a0a0a', padding: '60px', borderRadius: '40px', border: '1px solid #E50914', textAlign: 'center', boxShadow: '0 0 30px rgba(229,9,20,0.2)' },
