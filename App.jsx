@@ -15,11 +15,27 @@ export default function AlexHubUltra() {
   const [transitioning, setTransitioning] = useState(false);
   const [modal, setModal] = useState(null);
 
-  // --- ESTADOS PARA SISTEMA PREMIUM USERS (PU) ---
+  // --- ESTADOS PARA SISTEMA PREMIUM USERS (PU) CON MEMORIA ---
   const [puMode, setPuMode] = useState('closed'); // 'closed', 'auth', 'admin', 'list'
   const [puCode, setPuCode] = useState('');
-  const [premiumUsers, setPremiumUsers] = useState([]); // Lista infinita de usuarios
+  
+  // AQUÍ ESTÁ LA MAGIA: Carga los usuarios guardados al iniciar
+  const [premiumUsers, setPremiumUsers] = useState(() => {
+    try {
+      const saved = localStorage.getItem('ALEX_PU_DATABASE');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  
   const [newPuName, setNewPuName] = useState('');
+
+  // --- 0. SISTEMA DE GUARDADO AUTOMÁTICO ---
+  // Cada vez que la lista cambia, se guarda en el navegador
+  useEffect(() => {
+    localStorage.setItem('ALEX_PU_DATABASE', JSON.stringify(premiumUsers));
+  }, [premiumUsers]);
 
   // --- 1. INTELIGENCIA DE RUTA (DEEP LINKING) ---
   useEffect(() => {
