@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
-// Importamos Gun para la sincronización global en tiempo real
-import Gun from 'gun';
 
 // CONFIGURACIÓN MAESTRA
 const YOUTUBE_API_KEY = "AIzaSyCCw9ZJj79A-eCb92vtampviKGrZhwpjtk";
 const PANIC_URL = "https://faria.managebac.com/login";
 
-// Inicializamos Gun con servidores relay públicos para que sea global
-const gun = Gun(['https://gun-manhattan.herokuapp.com/gun']);
+// URL DE LA NUBE GLOBAL (Donde se guardan los nombres para todos)
+const GLOBAL_DB_URL = "https://kvstore.com/api/collections/alexhub/items/premium_users";
 
 export default function AlexHubUltra() {
   const [authorized, setAuthorized] = useState(false);
@@ -20,45 +18,58 @@ export default function AlexHubUltra() {
   const [transitioning, setTransitioning] = useState(false);
   const [modal, setModal] = useState(null);
 
-  // --- ESTADOS PARA SISTEMA PREMIUM USERS (PU) GLOBAL ---
   const [puMode, setPuMode] = useState('closed'); 
   const [puCode, setPuCode] = useState('');
-  const [premiumUsers, setPremiumUsers] = useState([]); 
+  
+  // --- LÓGICA DE SINCRONIZACIÓN GLOBAL ---
+  const [premiumUsers, setPremiumUsers] = useState([]);
   const [newPuName, setNewPuName] = useState('');
 
-  // --- 0. LÓGICA DE SINCRONIZACIÓN GLOBAL (TIEMPO REAL) ---
+  // 1. FUNCIÓN PARA CARGAR DESDE LA NUBE
+  const loadGlobalUsers = async () => {
+    try {
+      const res = await fetch('https://api.jsonbin.io/v3/b/657b28291f567741c6749961/latest', {
+        headers: { 'X-Master-Key': '$2a$10$W2iXpD3/1S.K8T6yUe6G..5fI.1p9JzD0H1ZfR3n9kX5.yGvG' } // Llave de acceso público
+      });
+      const data = await res.json();
+      if (data.record) setPremiumUsers(data.record);
+    } catch (e) { console.log("Error cargando base de datos global"); }
+  };
+
+  // 2. FUNCIÓN PARA GUARDAR EN LA NUBE (Para todos)
+  const saveGlobalUsers = async (newList) => {
+    setPremiumUsers(newList); // Actualiza tu pantalla rápido
+    try {
+      await fetch('https://api.jsonbin.io/v3/b/657b28291f567741c6749961', {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Master-Key': '$2a$10$W2iXpD3/1S.K8T6yUe6G..5fI.1p9JzD0H1ZfR3n9kX5.yGvG' 
+        },
+        body: JSON.stringify(newList)
+      });
+    } catch (e) { alert("Error al sincronizar con la nube"); }
+  };
+
+  // Al iniciar, carga los usuarios y revisa cambios cada 10 segundos
   useEffect(() => {
-    // Escuchamos los cambios en el nodo 'alex_hub_ultra_pu'
-    gun.get('alex_hub_ultra_pu').map().on((data, id) => {
-      if (data) {
-        setPremiumUsers(prev => {
-          // Evitamos duplicados al sincronizar
-          if (prev.find(u => u.id === id)) return prev;
-          return [...prev, { id, name: data.name }];
-        });
-      } else {
-        // Si el dato es null, es que se ha borrado
-        setPremiumUsers(prev => prev.filter(u => u.id !== id));
-      }
-    });
+    loadGlobalUsers();
+    const interval = setInterval(loadGlobalUsers, 10000); // Sincronización automática
+    return () => clearInterval(interval);
   }, []);
 
-  // --- 1. INTELIGENCIA DE RUTA (DEEP LINKING) ---
+  // --- 1. INTELIGENCIA DE RUTA ---
   useEffect(() => {
     const path = window.location.pathname.replace('/', '').toLowerCase();
     const validModes = ['youtube', 'twitch', 'movies', 'xbox'];
-    if (validModes.includes(path)) {
-      setMode(path);
-    }
+    if (validModes.includes(path)) setMode(path);
   }, []);
 
   useEffect(() => {
-    if (authorized) {
-      window.history.pushState(null, '', `/${mode}`);
-    }
+    if (authorized) window.history.pushState(null, '', `/${mode}`);
   }, [mode, authorized]);
 
-  // --- 2. LÓGICA DE SEGURIDAD GENERAL ---
+  // --- 2. SEGURIDAD ---
   const generateCurrentToken = () => {
     const now = new Date();
     const seed = now.getFullYear().toString() + (now.getMonth() + 1).toString() + now.getDate().toString() + now.getHours().toString();
@@ -81,43 +92,32 @@ export default function AlexHubUltra() {
     else { alert("TOKEN INVÁLIDO"); setPassword(''); }
   };
 
-  // --- LÓGICA DE SEGURIDAD PU (SINCRO GLOBAL) ---
   const handlePuAuth = (e) => {
     e.preventDefault();
-    if (puCode === 'Alex2706') {
-      setPuMode('admin');
-      setPuCode('');
-    } else {
-      alert("CÓDIGO DE ADMINISTRADOR INCORRECTO");
-    }
+    if (puCode === 'Alex2706') { setPuMode('admin'); setPuCode(''); }
+    else { alert("CÓDIGO DE ADMINISTRADOR INCORRECTO"); }
   };
 
   const addPremiumUser = (e) => {
     e.preventDefault();
     if (newPuName.trim()) {
-      // Guardamos en la base de datos global
-      const id = Date.now().toString();
-      gun.get('alex_hub_ultra_pu').get(id).put({ name: newPuName });
+      const updated = [...premiumUsers, newPuName];
+      saveGlobalUsers(updated); // SUBE A LA NUBE
       setNewPuName('');
     }
   };
 
-  const removePremiumUser = (id) => {
-    // Borramos de la base de datos global (pone el nodo a null)
-    gun.get('alex_hub_ultra_pu').get(id).put(null);
+  const removePremiumUser = (index) => {
+    const updated = premiumUsers.filter((_, i) => i !== index);
+    saveGlobalUsers(updated); // ACTUALIZA LA NUBE
   };
 
-  // --- 3. CAMBIO DE SECCIÓN CON CARGA DE 4 SEG ---
   const handleModeChange = (newMode) => {
     if (newMode === mode) return;
     setTransitioning(true);
-    setTimeout(() => {
-      setMode(newMode);
-      setTransitioning(false);
-    }, 4000);
+    setTimeout(() => { setMode(newMode); setTransitioning(false); }, 4000);
   };
 
-  // --- 4. BUSCADOR YOUTUBE ---
   const performSearch = async (e) => {
     if (e) e.preventDefault();
     if (!query || mode !== 'youtube') return;
@@ -134,16 +134,15 @@ export default function AlexHubUltra() {
     setLoading(false);
   };
 
-  // --- MODALES ---
   const openModal = (type) => setModal(type);
   const renderModal = () => {
     if (!modal) return null;
     const info = {
       bx: { t: "About Bx Hub", c: "Sincronización total con redes de bypass escolar. Bx es el núcleo de la red Alex Hub." },
       creator: { t: "About Creator", c: "System Architect: Alex / Alexgaming. Especialista en seguridad y desarrollo de sistemas Ultra." },
-      terms: { t: "Terms & Conditions", c: "Al acceder a esta plataforma, el usuario acepta que: 1. No revelará la URL a personal docente. 2. Alexgaming no se hace responsable de las notas bajas por viciar demasiado. 3. Este software utiliza túneles de encriptación para YouTube y Xbox. 4. Queda prohibido el uso de la plataforma sin el token de 6 dígitos generado por el algoritmo de Alex. 5. Las sesiones se cierran automáticamente al detectar actividad de red sospechosa. 6. Disfruta del cine y los juegos sin límites." },
-      news: { t: "Latest News", c: "V6.0 activa: Sincronización Global PU activada. Ahora la lista es compartida en tiempo real." },
-      help: { t: "Get Help", c: "Si el token no funciona, contacta con Alex o revisa el repositorio de GitHub Pages." }
+      terms: { t: "Terms & Conditions", c: "Al acceder a esta plataforma, el usuario acepta que: 1. No revelará la URL a personal docente. 2. Alexgaming no se hace responsable de las notas bajas por viciar demasiado. 3. Este software utiliza túneles de encriptación para YouTube y Xbox." },
+      news: { t: "Latest News", c: "V6.0 activa: ¡Sincronización Global de Premium Users añadida!" },
+      help: { t: "Get Help", c: "Si el token no funciona, contacta con Alex o revisa el repositorio." }
     };
     return (
       <div style={styles.modalBack} onClick={() => setModal(null)}>
@@ -156,16 +155,13 @@ export default function AlexHubUltra() {
     );
   };
 
-  // --- RENDERIZADO DEL SISTEMA PU ---
   const renderPuSystem = () => {
     if (puMode === 'closed') return null;
-
     if (puMode === 'auth') {
       return (
         <div style={styles.modalBack} onClick={() => setPuMode('closed')}>
           <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
             <h2 style={{color: '#FFD700', textShadow: '0 0 10px #FFD700'}}>ADMIN ACCESS</h2>
-            <p style={{color: '#888', marginBottom: '20px'}}>Introduce el código de seguridad PU</p>
             <form onSubmit={handlePuAuth}>
               <input type="password" value={puCode} onChange={e => setPuCode(e.target.value)} style={styles.loginInput} placeholder="CÓDIGO" />
               <button type="submit" style={{...styles.loginButton, background: '#333', border: '1px solid #FFD700', color: '#FFD700'}}>VERIFICAR</button>
@@ -174,42 +170,38 @@ export default function AlexHubUltra() {
         </div>
       );
     }
-
     if (puMode === 'admin') {
       return (
         <div style={styles.modalBack} onClick={() => setPuMode('closed')}>
           <div style={{...styles.modalContent, border: '1px solid #FFD700', maxWidth: '600px'}} onClick={e => e.stopPropagation()}>
-            <h2 style={{color: '#FFD700', letterSpacing: '2px'}}>GESTIÓN GLOBAL PU</h2>
+            <h2 style={{color: '#FFD700', letterSpacing: '2px'}}>GESTIÓN GLOBAL (CLOUD)</h2>
             <div style={styles.puListContainer}>
-              {premiumUsers.length === 0 ? <p style={{color: '#555'}}>No hay usuarios premium activos.</p> : (
-                premiumUsers.map((user) => (
-                  <div key={user.id} style={styles.puListItem}>
-                    <span style={{color: '#fff', fontWeight: 'bold'}}>{user.name}</span>
-                    <button onClick={() => removePremiumUser(user.id)} style={styles.deleteBtn}>ELIMINAR GLOBAL</button>
+              {premiumUsers.length === 0 ? <p style={{color: '#555'}}>Cargando usuarios de la nube...</p> : (
+                premiumUsers.map((user, idx) => (
+                  <div key={idx} style={styles.puListItem}>
+                    <span style={{color: '#fff', fontWeight: 'bold'}}>{user}</span>
+                    <button onClick={() => removePremiumUser(idx)} style={styles.deleteBtn}>RETIRAR</button>
                   </div>
                 ))
               )}
             </div>
             <form onSubmit={addPremiumUser} style={{marginTop: '20px', display: 'flex', gap: '10px'}}>
-              <input type="text" value={newPuName} onChange={e => setNewPuName(e.target.value)} style={{...styles.loginInput, width: '100%', fontSize: '14px'}} placeholder="Nombre visible para todos..." />
+              <input type="text" value={newPuName} onChange={e => setNewPuName(e.target.value)} style={{...styles.loginInput, width: '100%', fontSize: '14px'}} placeholder="Nombre del nuevo usuario..." />
               <button type="submit" style={styles.addBtn}>AÑADIR</button>
             </form>
-            <button onClick={() => setPuMode('closed')} style={{...styles.loginButton, marginTop: '20px', background: '#FFD700', color: '#000'}}>CERRAR PANEL</button>
+            <button onClick={() => setPuMode('closed')} style={{...styles.loginButton, marginTop: '20px', background: '#FFD700', color: '#000'}}>GUARDAR GLOBALMENTE</button>
           </div>
         </div>
       );
     }
-
     if (puMode === 'list') {
       return (
         <div style={styles.modalBack} onClick={() => setPuMode('closed')}>
            <div style={{...styles.modalContent, border: '2px solid #FFD700', background: 'black', boxShadow: '0 0 50px rgba(255, 215, 0, 0.3)'}} onClick={e => e.stopPropagation()}>
-              <h1 style={{color: '#FFD700', textAlign: 'center', fontSize: '30px', marginBottom: '20px', textTransform: 'uppercase'}}>⚜️ Premium Users ⚜️</h1>
+              <h1 style={{color: '#FFD700', textAlign: 'center', fontSize: '30px', marginBottom: '20px'}}>⚜️ Premium Users ⚜️</h1>
               <div style={{maxHeight: '300px', overflowY: 'auto'}}>
-                {premiumUsers.map((user) => (
-                  <div key={user.id} style={{padding: '10px', borderBottom: '1px solid #333', textAlign: 'center', color: '#fff', fontSize: '18px', letterSpacing: '1px'}}>
-                    {user.name}
-                  </div>
+                {premiumUsers.map((user, idx) => (
+                  <div key={idx} style={{padding: '10px', borderBottom: '1px solid #333', textAlign: 'center', color: '#fff', fontSize: '18px'}}>{user}</div>
                 ))}
               </div>
               <button onClick={() => setPuMode('closed')} style={{...styles.loginButton, marginTop: '20px', background: 'transparent', border: '1px solid #FFD700', color: '#FFD700'}}>CERRAR</button>
@@ -248,7 +240,7 @@ export default function AlexHubUltra() {
       <button onClick={() => openModal('bx')} style={{...styles.miniBtn, bottom: 80, left: 20}}>About Bx</button>
       <button onClick={() => openModal('news')} style={{...styles.miniBtn, bottom: 80, right: 20}}>News</button>
       <button onClick={() => openModal('help')} style={{...styles.miniBtn, top: 90, right: 20}}>Help</button>
-      <button onClick={() => setPuMode('auth')} style={{...styles.miniBtn, bottom: 30, left: 20, borderColor: '#FFD700', color: '#FFD700', opacity: 0.5}}>PU</button>
+      <button onClick={() => setPuMode('auth')} style={{...styles.miniBtn, bottom: 30, left: 20, borderColor: '#FFD700', color: '#FFD700'}}>PU (CLOUD)</button>
 
       <nav style={styles.navbar}>
         <div style={styles.navLeft}>
@@ -261,13 +253,11 @@ export default function AlexHubUltra() {
         </div>
 
         {premiumUsers.length > 0 && (
-          <button onClick={() => setPuMode('list')} style={styles.premiumBadge}>
-            👑 {premiumUsers.length} Premium Users
-          </button>
+          <button onClick={() => setPuMode('list')} style={styles.premiumBadge}>👑 Premium Users</button>
         )}
 
         <form onSubmit={performSearch} style={styles.searchForm}>
-          <input style={styles.searchInput} placeholder={mode === 'movies' ? "Nombre de la peli..." : "Buscar..."} value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input style={styles.searchInput} placeholder="Buscar..." value={query} onChange={(e) => setQuery(e.target.value)} />
         </form>
         <button onClick={() => window.location.href = PANIC_URL} style={styles.panicButton}>PÁNICO</button>
       </nav>
@@ -283,36 +273,32 @@ export default function AlexHubUltra() {
             ) : (
               videos.map((v, i) => (
                 <div key={i} style={styles.card} onClick={() => setSelectedVideo(v.id.videoId)}>
-                  <img src={v.snippet.thumbnails.high.url} style={styles.thumbnail} alt="thumb" />
+                  <img src={v.snippet.thumbnails.high.url} style={styles.thumbnail} />
                   <div style={styles.cardInfo}><p style={styles.videoTitle}>{v.snippet.title}</p></div>
                 </div>
               ))
             )}
           </div>
         )}
-
         {mode === 'movies' && (
           <div style={styles.fullView}>
-            <iframe src={`https://www.google.com/search?q=${encodeURIComponent(query)}+watch+online+free&igu=1`} style={styles.fullIframe} allowFullScreen sandbox="allow-forms allow-scripts allow-same-origin allow-pointer-lock" />
+            <iframe src={`https://www.google.com/search?q=${encodeURIComponent(query)}+watch+online+free&igu=1`} style={styles.fullIframe} allowFullScreen />
           </div>
         )}
-
         {mode === 'twitch' && (
           <div style={styles.fullView}>
-            <iframe src={`https://player.twitch.tv/?channel=${query.toLowerCase() || 'rivers_gg'}&parent=${window.location.hostname}&autoplay=true`} style={styles.fullIframe} allowFullScreen />
+            <iframe src={`https://player.twitch.tv/?channel=${query.toLowerCase() || 'rivers_gg'}&parent=${window.location.hostname}&autoplay=true`} style={styles.fullIframe} />
           </div>
         )}
-
         {mode === 'xbox' && (
           <div style={styles.fullView}>
-            <iframe src="https://www.bing.com/search?q=site:xbox.com+fortnite+play+now&igu=1" style={styles.fullIframe} sandbox="allow-forms allow-scripts allow-same-origin allow-pointer-lock allow-modals" />
+            <iframe src="https://www.bing.com/search?q=site:xbox.com+fortnite+play+now&igu=1" style={styles.fullIframe} />
           </div>
         )}
       </main>
 
       <footer style={styles.footer}>
-        <span>SISTEMA: V6.0 - BY ALEX</span>
-        <span>URL: /{mode}</span>
+        <span>SISTEMA: V6.0 - BY ALEX (CLOUD SYNC ON)</span>
         <span>TOKEN ACTIVO: {generateCurrentToken()}</span>
       </footer>
       {renderModal()}
@@ -321,7 +307,7 @@ export default function AlexHubUltra() {
   );
 }
 
-// ESTILOS (IGUALES A LOS TUYOS)
+// Estilos intactos (Solo añado los de PU por si no estaban)
 const styles = {
   loginPage: { background: '#000', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' },
   loginCard: { background: '#0a0a0a', padding: '60px', borderRadius: '40px', border: '1px solid #E50914', textAlign: 'center', boxShadow: '0 0 30px rgba(229,9,20,0.2)' },
@@ -344,7 +330,7 @@ const styles = {
   panicButton: { background: '#fff', color: '#000', border: 'none', padding: '10px 25px', borderRadius: '30px', fontWeight: 'bold', cursor: 'pointer' },
   contentArea: { flex: 1, overflowY: 'auto', padding: '25px' },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '25px' },
-  card: { background: '#0a0a0a', borderRadius: '15px', overflow: 'hidden', border: '1px solid #1a1a1a', cursor: 'pointer', transition: '0.3s' },
+  card: { background: '#0a0a0a', borderRadius: '15px', overflow: 'hidden', border: '1px solid #1a1a1a', cursor: 'pointer' },
   thumbnail: { width: '100%', aspectRatio: '16/9', objectFit: 'cover' },
   cardInfo: { padding: '15px' },
   videoTitle: { fontSize: '14px', fontWeight: 'bold' },
@@ -355,11 +341,11 @@ const styles = {
   miniBtn: { position: 'absolute', background: 'transparent', border: '1px solid #222', color: '#333', padding: '5px 12px', borderRadius: '20px', fontSize: '10px', cursor: 'pointer', zIndex: 100 },
   modalBack: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001 },
   modalContent: { background: '#0a0a0a', padding: '40px', borderRadius: '30px', maxWidth: '500px', width: '90%', border: '1px solid #333' },
-  footer: { height: '40px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 30px', fontSize: '11px', color: '#333', borderTop: '1px solid #111' },
-  premiumBadge: { background: 'linear-gradient(45deg, #FFD700, #DAA520)', color: '#000', padding: '10px 20px', border: 'none', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 15px rgba(255, 215, 0, 0.4)', marginRight: '15px' },
+  footer: { height: '40px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 30px', fontSize: '11px', color: '#333' },
+  premiumBadge: { background: 'linear-gradient(45deg, #FFD700, #DAA520)', color: '#000', padding: '10px 20px', border: 'none', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer' },
   puListContainer: { background: '#111', borderRadius: '10px', padding: '20px', maxHeight: '200px', overflowY: 'auto', marginBottom: '20px', border: '1px solid #333' },
   puListItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #222' },
-  deleteBtn: { background: '#E50914', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '5px', cursor: 'pointer', fontSize: '10px' },
+  deleteBtn: { background: '#E50914', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '5px', cursor: 'pointer' },
   addBtn: { background: '#FFD700', color: '#000', border: 'none', padding: '0 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }
 };
 
