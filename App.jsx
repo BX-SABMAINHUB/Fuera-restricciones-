@@ -15,6 +15,12 @@ export default function AlexHubUltra() {
   const [transitioning, setTransitioning] = useState(false);
   const [modal, setModal] = useState(null);
 
+  // --- ESTADOS PARA SISTEMA PREMIUM USERS (PU) ---
+  const [puMode, setPuMode] = useState('closed'); // 'closed', 'auth', 'admin', 'list'
+  const [puCode, setPuCode] = useState('');
+  const [premiumUsers, setPremiumUsers] = useState([]); // Lista infinita de usuarios
+  const [newPuName, setNewPuName] = useState('');
+
   // --- 1. INTELIGENCIA DE RUTA (DEEP LINKING) ---
   useEffect(() => {
     const path = window.location.pathname.replace('/', '').toLowerCase();
@@ -30,7 +36,7 @@ export default function AlexHubUltra() {
     }
   }, [mode, authorized]);
 
-  // --- 2. LÓGICA DE SEGURIDAD ---
+  // --- 2. LÓGICA DE SEGURIDAD GENERAL ---
   const generateCurrentToken = () => {
     const now = new Date();
     const seed = now.getFullYear().toString() + (now.getMonth() + 1).toString() + now.getDate().toString() + now.getHours().toString();
@@ -51,6 +57,30 @@ export default function AlexHubUltra() {
     e.preventDefault();
     if (password === generateCurrentToken()) setAuthorized(true);
     else { alert("TOKEN INVÁLIDO"); setPassword(''); }
+  };
+
+  // --- LÓGICA DE SEGURIDAD PU (PREMIUM USERS) ---
+  const handlePuAuth = (e) => {
+    e.preventDefault();
+    if (puCode === 'Alex2706') {
+      setPuMode('admin');
+      setPuCode('');
+    } else {
+      alert("CÓDIGO DE ADMINISTRADOR INCORRECTO");
+    }
+  };
+
+  const addPremiumUser = (e) => {
+    e.preventDefault();
+    if (newPuName.trim()) {
+      setPremiumUsers([...premiumUsers, newPuName]);
+      setNewPuName('');
+    }
+  };
+
+  const removePremiumUser = (index) => {
+    const updated = premiumUsers.filter((_, i) => i !== index);
+    setPremiumUsers(updated);
   };
 
   // --- 3. CAMBIO DE SECCIÓN CON CARGA DE 4 SEG ---
@@ -102,6 +132,81 @@ export default function AlexHubUltra() {
     );
   };
 
+  // --- RENDERIZADO DEL SISTEMA PU ---
+  const renderPuSystem = () => {
+    if (puMode === 'closed') return null;
+
+    // 1. AUTH SCREEN
+    if (puMode === 'auth') {
+      return (
+        <div style={styles.modalBack} onClick={() => setPuMode('closed')}>
+          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <h2 style={{color: '#FFD700', textShadow: '0 0 10px #FFD700'}}>ADMIN ACCESS</h2>
+            <p style={{color: '#888', marginBottom: '20px'}}>Introduce el código de seguridad PU</p>
+            <form onSubmit={handlePuAuth}>
+              <input type="password" value={puCode} onChange={e => setPuCode(e.target.value)} style={styles.loginInput} placeholder="CÓDIGO" />
+              <button type="submit" style={{...styles.loginButton, background: '#333', border: '1px solid #FFD700', color: '#FFD700'}}>VERIFICAR</button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // 2. ADMIN PANEL (Gestión de usuarios)
+    if (puMode === 'admin') {
+      return (
+        <div style={styles.modalBack} onClick={() => setPuMode('closed')}>
+          <div style={{...styles.modalContent, border: '1px solid #FFD700', maxWidth: '600px'}} onClick={e => e.stopPropagation()}>
+            <h2 style={{color: '#FFD700', letterSpacing: '2px'}}>GESTIÓN PREMIUM USERS</h2>
+            
+            <div style={styles.puListContainer}>
+              {premiumUsers.length === 0 ? <p style={{color: '#555'}}>No hay usuarios premium activos.</p> : (
+                premiumUsers.map((user, idx) => (
+                  <div key={idx} style={styles.puListItem}>
+                    <span style={{color: '#fff', fontWeight: 'bold'}}>{user}</span>
+                    <button onClick={() => removePremiumUser(idx)} style={styles.deleteBtn}>RETIRAR</button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <form onSubmit={addPremiumUser} style={{marginTop: '20px', display: 'flex', gap: '10px'}}>
+              <input 
+                type="text" 
+                value={newPuName} 
+                onChange={e => setNewPuName(e.target.value)} 
+                style={{...styles.loginInput, width: '100%', fontSize: '14px'}} 
+                placeholder="Nombre del nuevo usuario..." 
+              />
+              <button type="submit" style={styles.addBtn}>AÑADIR</button>
+            </form>
+
+            <button onClick={() => setPuMode('closed')} style={{...styles.loginButton, marginTop: '20px', background: '#FFD700', color: '#000'}}>GUARDAR Y SALIR</button>
+          </div>
+        </div>
+      );
+    }
+
+    // 3. LISTA PÚBLICA (Lo que ve la gente)
+    if (puMode === 'list') {
+      return (
+        <div style={styles.modalBack} onClick={() => setPuMode('closed')}>
+           <div style={{...styles.modalContent, border: '2px solid #FFD700', background: 'black', boxShadow: '0 0 50px rgba(255, 215, 0, 0.3)'}} onClick={e => e.stopPropagation()}>
+              <h1 style={{color: '#FFD700', textAlign: 'center', fontSize: '30px', marginBottom: '20px', textTransform: 'uppercase'}}>⚜️ Premium Users ⚜️</h1>
+              <div style={{maxHeight: '300px', overflowY: 'auto'}}>
+                {premiumUsers.map((user, idx) => (
+                  <div key={idx} style={{padding: '10px', borderBottom: '1px solid #333', textAlign: 'center', color: '#fff', fontSize: '18px', letterSpacing: '1px'}}>
+                    {user}
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => setPuMode('closed')} style={{...styles.loginButton, marginTop: '20px', background: 'transparent', border: '1px solid #FFD700', color: '#FFD700'}}>CERRAR</button>
+           </div>
+        </div>
+      );
+    }
+  };
+
   if (!authorized) {
     return (
       <div style={styles.loginPage}>
@@ -129,10 +234,13 @@ export default function AlexHubUltra() {
         </div>
       )}
 
-      {/* 5 BOTONES EN LAS ESQUINAS/FOOTER */}
+      {/* BOTONES ESQUINAS */}
       <button onClick={() => openModal('bx')} style={{...styles.miniBtn, bottom: 80, left: 20}}>About Bx</button>
       <button onClick={() => openModal('news')} style={{...styles.miniBtn, bottom: 80, right: 20}}>News</button>
       <button onClick={() => openModal('help')} style={{...styles.miniBtn, top: 90, right: 20}}>Help</button>
+      
+      {/* BOTÓN PU DISCRETO */}
+      <button onClick={() => setPuMode('auth')} style={{...styles.miniBtn, bottom: 30, left: 20, borderColor: '#FFD700', color: '#FFD700', opacity: 0.5}}>PU</button>
 
       <nav style={styles.navbar}>
         <div style={styles.navLeft}>
@@ -143,6 +251,14 @@ export default function AlexHubUltra() {
             ))}
           </div>
         </div>
+
+        {/* BOTÓN PREMIUM USERS (SOLO SALE SI HAY USUARIOS) */}
+        {premiumUsers.length > 0 && (
+          <button onClick={() => setPuMode('list')} style={styles.premiumBadge}>
+            👑 Premium Users
+          </button>
+        )}
+
         <form onSubmit={performSearch} style={styles.searchForm}>
           <input 
             style={styles.searchInput} 
@@ -198,6 +314,7 @@ export default function AlexHubUltra() {
         <span>TOKEN ACTIVO: {generateCurrentToken()}</span>
       </footer>
       {renderModal()}
+      {renderPuSystem()}
     </div>
   );
 }
@@ -241,9 +358,16 @@ const styles = {
   
   miniBtn: { position: 'absolute', background: 'transparent', border: '1px solid #222', color: '#333', padding: '5px 12px', borderRadius: '20px', fontSize: '10px', cursor: 'pointer', zIndex: 100 },
   modalBack: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001 },
-  modalContent: { background: '#0a0a0a', padding: '40px', borderRadius: '30px', maxWidth: '500px', border: '1px solid #333' },
+  modalContent: { background: '#0a0a0a', padding: '40px', borderRadius: '30px', maxWidth: '500px', width: '90%', border: '1px solid #333' },
   
-  footer: { height: '40px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 30px', fontSize: '11px', color: '#333', borderTop: '1px solid #111' }
+  footer: { height: '40px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 30px', fontSize: '11px', color: '#333', borderTop: '1px solid #111' },
+
+  // --- ESTILOS PU NUEVOS ---
+  premiumBadge: { background: 'linear-gradient(45deg, #FFD700, #DAA520)', color: '#000', padding: '10px 20px', border: 'none', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 0 15px rgba(255, 215, 0, 0.4)', marginRight: '15px' },
+  puListContainer: { background: '#111', borderRadius: '10px', padding: '20px', maxHeight: '200px', overflowY: 'auto', marginBottom: '20px', border: '1px solid #333' },
+  puListItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #222' },
+  deleteBtn: { background: '#E50914', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '5px', cursor: 'pointer', fontSize: '10px' },
+  addBtn: { background: '#FFD700', color: '#000', border: 'none', padding: '0 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }
 };
 
 // Inyectar animación
