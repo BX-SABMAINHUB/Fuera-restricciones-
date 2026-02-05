@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-// IMPORTAMOS FIREBASE DESDE LA RED (CDN)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, onValue, set, remove, serverTimestamp, onDisconnect, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-// --- TU CONFIGURACIÓN REAL DE FIREBASE ---
+// --- CONFIGURACIÓN FIREBASE ---
 const firebaseConfig = {
   apiKey: "AIzaSyD1zUmhiUVDv-ZYyJF7vTwGaS1AO9t9jiE",
   authDomain: "alexhub-eefdf.firebaseapp.com",
@@ -15,7 +14,6 @@ const firebaseConfig = {
   measurementId: "G-M8KSGN3WX9"
 };
 
-// Inicializamos Firebase
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
@@ -25,15 +23,17 @@ const PANIC_URL = "https://faria.managebac.com/login";
 const ADMIN_PASS = "Alex2706";
 
 export default function AlexHubUltraV12() {
-  // --- ESTADOS DE IDENTIDAD Y SEGURIDAD ---
-  const [userId, setUserId] = useState('');
+  // --- IDENTIDAD SECRETA (No visible en URL) ---
+  const [myId, setMyId] = useState('');
+  
+  // --- SEGURIDAD ---
   const [authorized, setAuthorized] = useState(false);
-  const [password, setPassword] = useState('');
+  const [tokenInput, setTokenInput] = useState('');
   const [isBanned, setIsBanned] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [muteTimeRemaining, setMuteTimeRemaining] = useState('');
-  
-  // --- ESTADOS DE NAVEGACIÓN ---
+
+  // --- NAVEGACIÓN ---
   const [mode, setMode] = useState('youtube'); 
   const [query, setQuery] = useState('');
   const [videos, setVideos] = useState([]);
@@ -41,46 +41,52 @@ export default function AlexHubUltraV12() {
   const [loading, setLoading] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
 
-  // --- ESTADOS DE ADMIN ---
-  const [adminMode, setAdminMode] = useState('closed'); // 'closed', 'auth', 'panel'
-  const [adminInput, setAdminInput] = useState('');
+  // --- SISTEMA DE ADMIN ---
+  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  const [adminAuthOpen, setAdminAuthOpen] = useState(false);
+  const [adminPassInput, setAdminPassInput] = useState('');
   const [onlineUsers, setOnlineUsers] = useState({});
-  const [bannedUsers, setBannedUsers] = useState({});
-  const [mutedUsers, setMutedUsers] = useState({});
+  const [bannedList, setBannedList] = useState({});
+  const [mutedList, setMutedList] = useState({});
   const [premiumUsers, setPremiumUsers] = useState([]);
   const [newPuName, setNewPuName] = useState('');
-  const [viewingPuList, setViewingPuList] = useState(false);
+  const [viewPuModal, setViewPuModal] = useState(false);
 
   // ==========================================
-  // 1. SISTEMA DE ID EN EL ENLACE (URL PERSISTENCE)
+  // 1. SISTEMA DE IDENTIDAD PROTEGIDA
   // ==========================================
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    let id = params.get('id');
-    
-    if (!id) {
-      id = 'ALEX-' + Math.random().toString(36).substr(2, 6).toUpperCase();
-      const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?id=' + id;
-      window.history.pushState({ path: newUrl }, '', newUrl);
+    // Generamos un ID persistente en el navegador que no depende de la URL
+    let storedId = localStorage.getItem('_alex_hub_id');
+    if (!storedId) {
+      storedId = 'USR-' + Math.random().toString(36).substring(2, 9).toUpperCase();
+      localStorage.setItem('_alex_hub_id', storedId);
     }
-    setUserId(id);
+    setMyId(storedId);
 
-    // Registro de presencia en Firebase
-    const userRef = ref(db, `online/${id}`);
-    set(userRef, { id: id, lastSeen: serverTimestamp(), agent: navigator.userAgent.slice(0, 50) });
-    onDisconnect(userRef).remove();
+    // Registro en Firebase Online
+    const myRef = ref(db, `online/${storedId}`);
+    set(myRef, {
+      id: storedId,
+      lastSeen: serverTimestamp(),
+      device: navigator.platform
+    });
+    onDisconnect(myRef).remove();
 
-    // Listeners de Seguridad
-    onValue(ref(db, `bans/${id}`), (snap) => { if (snap.exists()) setIsBanned(true); });
-    
-    onValue(ref(db, `mutes/${id}`), (snap) => {
-      if (snap.exists()) {
-        const expiry = snap.val().expiresAt;
+    // ESCUCHA DE BANEOS (Si el admin te banea, te echa al instante)
+    onValue(ref(db, `bans/${storedId}`), (snapshot) => {
+      if (snapshot.exists()) setIsBanned(true);
+    });
+
+    // ESCUCHA DE MUTES (Cronómetro en tiempo real)
+    onValue(ref(db, `mutes/${storedId}`), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
         const interval = setInterval(() => {
           const now = Date.now();
-          const diff = expiry - now;
+          const diff = data.expiresAt - now;
           if (diff <= 0) {
-            remove(ref(db, `mutes/${id}`));
+            remove(ref(db, `mutes/${storedId}`));
             setIsMuted(false);
             clearInterval(interval);
           } else {
@@ -96,15 +102,15 @@ export default function AlexHubUltraV12() {
       }
     });
 
-    // Sincronización de Datos para Admin
+    // LISTENERS PARA EL ADMIN (Carga de datos)
     onValue(ref(db, 'online'), (s) => setOnlineUsers(s.val() || {}));
-    onValue(ref(db, 'bans'), (s) => setBannedUsers(s.val() || {}));
-    onValue(ref(db, 'mutes'), (s) => setMutedUsers(s.val() || {}));
+    onValue(ref(db, 'bans'), (s) => setBannedList(s.val() || {}));
+    onValue(ref(db, 'mutes'), (s) => setMutedList(s.val() || {}));
     onValue(ref(db, 'premium_users'), (s) => setPremiumUsers(s.val() || []));
   }, []);
 
   // ==========================================
-  // 2. SEGURIDAD Y TOKEN
+  // 2. SEGURIDAD DE TOKEN (ALGORITMO ORIGINAL)
   // ==========================================
   const generateCurrentToken = useCallback(() => {
     const now = new Date();
@@ -124,21 +130,49 @@ export default function AlexHubUltraV12() {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (password === generateCurrentToken() || password === ADMIN_PASS) setAuthorized(true);
-    else { alert("TOKEN INVÁLIDO"); setPassword(''); }
+    if (tokenInput === generateCurrentToken() || tokenInput === ADMIN_PASS) {
+      setAuthorized(true);
+    } else {
+      alert("TOKEN INVÁLIDO");
+      setTokenInput('');
+    }
   };
 
   // ==========================================
-  // 3. ACCIONES DE ADMIN (REALES)
+  // 3. ACCIONES DE ADMIN (POWERFUL)
   // ==========================================
-  const banUser = (id) => { if(confirm(`Banear a ${id}?`)) set(ref(db, `bans/${id}`), {ts: serverTimestamp()}); };
-  const unbanUser = (id) => remove(ref(db, `bans/${id}`));
-  
-  const muteUser = (id) => {
-    const mins = prompt("Minutos de mute:", "5");
-    if (mins) set(ref(db, `mutes/${id}`), { expiresAt: Date.now() + (parseInt(mins) * 60000) });
+  const verifyAdmin = (e) => {
+    e.preventDefault();
+    if (adminPassInput === ADMIN_PASS) {
+      setAdminPanelOpen(true);
+      setAdminAuthOpen(false);
+      setAdminPassInput('');
+    } else {
+      alert("ACCESO DENEGADO");
+    }
   };
-  const unmuteUser = (id) => remove(ref(db, `mutes/${id}`));
+
+  const toggleBan = (id) => {
+    if (bannedList[id]) {
+      remove(ref(db, `bans/${id}`));
+    } else {
+      if(confirm(`¿Bloquear permanentemente a ${id}?`)) {
+        set(ref(db, `bans/${id}`), { bannedAt: serverTimestamp() });
+      }
+    }
+  };
+
+  const setMute = (id) => {
+    const mins = prompt("Minutos de silencio:", "10");
+    if (mins) {
+      const expiresAt = Date.now() + (parseInt(mins) * 60000);
+      set(ref(db, `mutes/${id}`), { expiresAt });
+    }
+  };
+
+  const cancelMute = (id) => {
+    remove(ref(db, `mutes/${id}`));
+  };
 
   const addPremium = (e) => {
     e.preventDefault();
@@ -148,47 +182,68 @@ export default function AlexHubUltraV12() {
       setNewPuName('');
     }
   };
-  const removePremium = (idx) => {
-    const updated = premiumUsers.filter((_, i) => i !== idx);
+
+  const removePremium = (index) => {
+    const updated = premiumUsers.filter((_, i) => i !== index);
     set(ref(db, 'premium_users'), updated);
   };
 
   // ==========================================
-  // 4. BÚSQUEDA Y RENDER
+  // 4. LÓGICA DE BÚSQUEDA
   // ==========================================
+  const handleModeChange = (newMode) => {
+    if (newMode === mode) return;
+    setTransitioning(true);
+    setTimeout(() => { setMode(newMode); setTransitioning(false); }, 1500);
+  };
+
   const performSearch = async (e) => {
     if (e) e.preventDefault();
     if (isMuted || !query || mode !== 'youtube') return;
     setLoading(true);
     try {
-      const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=20&q=${encodeURIComponent(query)}&type=video&key=${YOUTUBE_API_KEY}`);
+      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=25&q=${encodeURIComponent(query)}&type=video&key=${YOUTUBE_API_KEY}`;
+      const res = await fetch(url);
       const data = await res.json();
       setVideos(data.items || []);
-    } catch (err) { alert("Error API"); }
+      setSelectedVideo(null);
+    } catch (err) { console.error(err); }
     setLoading(false);
   };
 
-  // --- RENDERS DE SEGURIDAD ---
-  if (isBanned) return <div style={styles.fullscreenBlack}><h1 style={styles.errorText}>ACCESO DENEGADO (BAN)</h1><p>Tu ID {userId} está en la lista negra.</p></div>;
+  // ==========================================
+  // 5. RENDERIZADO
+  // ==========================================
 
+  // --- PANTALLA DE BANEO ---
+  if (isBanned) return (
+    <div style={styles.errorScreen}>
+      <h1 style={styles.glitchTextLarge}>SISTEMA BLOQUEADO</h1>
+      <p style={{color: '#666', marginTop: '20px'}}>Tu dispositivo ha sido vetado de Alex Hub Ultra.</p>
+      <p style={{fontSize: '10px', color: '#333'}}>ID_REF: {myId}</p>
+    </div>
+  );
+
+  // --- PANTALLA DE MUTE ---
   if (isMuted) return (
     <div style={styles.muteOverlay}>
-      <div style={styles.muteBox}>
+      <div style={styles.muteCard}>
         <h1 style={{fontSize: '60px', color: '#E50914'}}>🔇 MUTEADO</h1>
-        <p style={{fontSize: '20px', letterSpacing: '3px'}}>TIEMPO RESTANTE PARA EL DESBLOQUEO:</p>
-        <div style={styles.timer}>{muteTimeRemaining}</div>
+        <p style={{letterSpacing: '5px', color: '#888'}}>ESTADO DE SILENCIO ACTIVO</p>
+        <div style={styles.muteTimer}>{muteTimeRemaining}</div>
+        <p style={{fontSize: '12px', color: '#444', marginTop: '30px'}}>Espera a que el administrador retire la sanción.</p>
       </div>
     </div>
   );
 
+  // --- PANTALLA DE LOGIN ---
   if (!authorized) return (
     <div style={styles.loginPage}>
       <div style={styles.loginCard}>
-        <h1 style={styles.glitchTitle}>ALEX HUB <span style={{color: '#E50914'}}>ULTRA</span></h1>
-        <p style={{fontSize: '10px', color: '#333'}}>USUARIO_ID: {userId}</p>
-        <form onSubmit={handleLogin} style={{marginTop: '20px'}}>
-          <input type="text" placeholder="TOKEN" value={password} onChange={e=>setPassword(e.target.value)} style={styles.loginInput} />
-          <button type="submit" style={styles.loginBtn}>CONECTAR</button>
+        <h1 style={styles.glitchText}>ALEX HUB <span style={{color: '#E50914'}}>ULTRA</span></h1>
+        <form onSubmit={handleLogin}>
+          <input type="text" placeholder="TOKEN DE ACCESO" value={tokenInput} onChange={e=>setTokenInput(e.target.value)} style={styles.loginInput} />
+          <button type="submit" style={styles.loginBtn}>CONECTAR AL SERVIDOR</button>
         </form>
       </div>
     </div>
@@ -201,194 +256,233 @@ export default function AlexHubUltraV12() {
           <div style={styles.logoBox}><span style={styles.logoMain}>ALEX</span><span style={styles.logoSub}>HUB V12</span></div>
           <div style={styles.tabContainer}>
             {['youtube', 'twitch', 'movies', 'xbox'].map(m => (
-              <button key={m} onClick={() => setMode(m)} style={mode === m ? styles.activeTab : styles.tab}>{m.toUpperCase()}</button>
+              <button key={m} onClick={() => handleModeChange(m)} style={mode === m ? styles.activeTab : styles.tab}>{m.toUpperCase()}</button>
             ))}
           </div>
         </div>
 
-        {premiumUsers.length > 0 && <button onClick={() => setViewingPuList(true)} style={styles.premiumBadge}>👑 Premium Users</button>}
+        {premiumUsers.length > 0 && (
+          <button onClick={() => setViewPuModal(true)} style={styles.premiumBadge}>👑 Premium Users</button>
+        )}
 
         <form onSubmit={performSearch} style={styles.searchForm}>
-          <input style={styles.searchInput} placeholder="Buscar..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input style={styles.searchInput} placeholder="Buscar en la red..." value={query} onChange={(e) => setQuery(e.target.value)} />
         </form>
-        
-        <div style={{display:'flex', gap: '10px'}}>
-           <button onClick={() => window.location.href = PANIC_URL} style={styles.panicButton}>PÁNICO</button>
-           <button onClick={() => setAdminMode('auth')} style={styles.adminButton}>ADMIN</button>
+
+        <div style={{display: 'flex', gap: '10px'}}>
+           <button onClick={() => window.location.href = PANIC_URL} style={styles.panicBtn}>PÁNICO</button>
+           <button onClick={() => setAdminAuthOpen(true)} style={styles.adminEntryBtn}>ADMIN</button>
         </div>
       </nav>
 
       <main style={styles.contentArea}>
+        {transitioning && <div style={styles.loadOverlay}><div className="spin"></div></div>}
+
         {mode === 'youtube' && (
           <div style={styles.grid}>
             {selectedVideo ? (
-              <div style={styles.playerWrapper}>
-                <iframe src={`https://www.youtube-nocookie.com/embed/${selectedVideo}?autoplay=1`} style={styles.fullIframe} allowFullScreen />
-                <button onClick={() => setSelectedVideo(null)} style={styles.closeBtnVideo}>VOLVER</button>
+              <div style={styles.playerWrap}>
+                <iframe src={`https://www.youtube-nocookie.com/embed/${selectedVideo}?autoplay=1`} style={styles.iframe} allowFullScreen />
+                <button onClick={() => setSelectedVideo(null)} style={styles.closeVideoBtn}>CERRAR</button>
               </div>
             ) : (
               videos.map((v, i) => (
                 <div key={i} style={styles.card} onClick={() => setSelectedVideo(v.id.videoId)}>
-                  <img src={v.snippet.thumbnails.high.url} style={styles.thumbnail} />
-                  <div style={styles.cardInfo}><p style={styles.videoTitle}>{v.snippet.title}</p></div>
+                  <img src={v.snippet.thumbnails.high.url} style={styles.thumb} />
+                  <div style={styles.cardInfo}><p>{v.snippet.title}</p></div>
                 </div>
               ))
             )}
           </div>
         )}
+
         {mode !== 'youtube' && (
-            <div style={styles.fullView}>
-                <iframe src={mode === 'twitch' ? `https://player.twitch.tv/?channel=${query || 'ibai'}&parent=${window.location.hostname}` : mode === 'movies' ? `https://www.google.com/search?q=${query}+watch+online+free&igu=1` : "https://www.bing.com/search?q=fortnite+xbox+cloud&igu=1"} style={styles.fullIframe} />
-            </div>
+           <div style={styles.fullFrame}>
+              <iframe 
+                src={mode === 'twitch' ? `https://player.twitch.tv/?channel=${query || 'ibai'}&parent=${window.location.hostname}` :
+                     mode === 'movies' ? `https://www.google.com/search?q=${query}+watch+online+free&igu=1` :
+                     "https://www.bing.com/search?q=xbox+cloud+gaming+fortnite&igu=1"} 
+                style={styles.iframe} 
+              />
+           </div>
         )}
       </main>
 
-      {/* --- MODAL ADMIN PANEL --- */}
-      {adminMode === 'auth' && (
-        <div style={styles.modalBack} onClick={()=>setAdminMode('closed')}>
-          <div style={styles.modalContentSmall} onClick={e=>e.stopPropagation()}>
-            <h2 style={{color: '#E50914'}}>ADMIN ACCESS</h2>
-            <form onSubmit={(e)=>{e.preventDefault(); if(adminInput===ADMIN_PASS){setAdminMode('panel');setAdminInput('')}else{alert('Mal')}}}>
-              <input type="password" value={adminInput} onChange={e=>setAdminInput(e.target.value)} style={styles.loginInput} placeholder="PASSWORD" />
-              <button style={styles.loginBtn}>ENTRAR</button>
-            </form>
+      {/* --- MODAL LOGIN ADMIN --- */}
+      {adminAuthOpen && (
+        <div style={styles.modalOverlay} onClick={()=>setAdminAuthOpen(false)}>
+          <div style={styles.adminLoginBox} onClick={e=>e.stopPropagation()}>
+             <h2 style={{color: '#E50914', marginBottom: '20px'}}>SYSTEM OVERRIDE</h2>
+             <form onSubmit={verifyAdmin}>
+                <input type="password" value={adminPassInput} onChange={e=>setAdminPassInput(e.target.value)} style={styles.loginInput} placeholder="CLAVE MAESTRA" autoFocus />
+                <button style={styles.loginBtn}>ENTRAR AL NÚCLEO</button>
+             </form>
           </div>
         </div>
       )}
 
-      {adminMode === 'panel' && (
-        <div style={styles.modalBack}>
-          <div style={styles.adminPanelLarge}>
-            <div style={styles.adminHeader}>
-              <h2 style={{margin:0}}>ALEX COMMAND CENTER</h2>
-              <button onClick={()=>setAdminMode('closed')} style={styles.closeBtnSmall}>X</button>
-            </div>
-            <div style={styles.adminBody}>
-              <div style={styles.adminCol}>
-                <h3 style={{color: '#00ff41'}}>🟢 ONLINE</h3>
-                <div style={styles.adminScroll}>
+      {/* --- PANEL DE CONTROL REAL (FRAME ADMIN) --- */}
+      {adminPanelOpen && (
+        <div style={styles.adminFrame}>
+          <div style={styles.adminHeader}>
+            <h1 style={{fontSize: '18px'}}>ALEX HUB COMMAND CENTER V12</h1>
+            <button onClick={()=>setAdminPanelOpen(false)} style={styles.closeAdmin}>CERRAR PANEL</button>
+          </div>
+          
+          <div style={styles.adminBody}>
+            {/* USUARIOS ONLINE */}
+            <div style={styles.adminSection}>
+               <h3 style={{color: '#00ff41'}}>🟢 USUARIOS ACTIVOS ({Object.keys(onlineUsers).length})</h3>
+               <div style={styles.scrollList}>
                   {Object.values(onlineUsers).map(u => (
-                    <div key={u.id} style={styles.userItem}>
-                      <span style={{color: u.id === userId ? '#E50914' : '#fff'}}>{u.id}</span>
-                      <div style={{display:'flex', gap:'5px'}}>
-                        <button onClick={()=>muteUser(u.id)} style={styles.btnMute}>MUTE</button>
-                        <button onClick={()=>banUser(u.id)} style={styles.btnBan}>BAN</button>
-                      </div>
+                    <div key={u.id} style={styles.adminUserItem}>
+                       <span style={{color: u.id === myId ? '#E50914' : '#fff'}}>{u.id}</span>
+                       <div style={{display: 'flex', gap: '5px'}}>
+                          <button onClick={()=>setMute(u.id)} style={styles.smallMuteBtn}>MUTE</button>
+                          <button onClick={()=>toggleBan(u.id)} style={styles.smallBanBtn}>BAN</button>
+                       </div>
                     </div>
                   ))}
-                </div>
-              </div>
-              <div style={styles.adminCol}>
-                <h3 style={{color: '#E50914'}}>🚫 CONTROL</h3>
-                <div style={styles.adminScroll}>
-                   <p style={{fontSize:'10px'}}>MUTES ACTIVOS:</p>
-                   {Object.keys(mutedUsers).map(id => (
-                     <div key={id} style={styles.userItem}><span>{id}</span><button onClick={()=>unmuteUser(id)} style={styles.btnUnban}>QUITAR MUTE</button></div>
-                   ))}
-                   <p style={{fontSize:'10px', marginTop:'10px'}}>BANS:</p>
-                   {Object.keys(bannedUsers).map(id => (
-                     <div key={id} style={styles.userItem}><span>{id}</span><button onClick={()=>unbanUser(id)} style={styles.btnUnban}>DESBAN</button></div>
-                   ))}
-                </div>
-                <div style={{marginTop:'10px', borderTop:'1px solid #222', paddingTop:'10px'}}>
-                   <h4 style={{color:'#FFD700'}}>PREMIUM MGMT</h4>
-                   <form onSubmit={addPremium} style={{display:'flex', gap:'5px'}}>
-                     <input value={newPuName} onChange={e=>setNewPuName(e.target.value)} placeholder="Nombre..." style={styles.adminInput} />
-                     <button style={styles.addBtn}>+</button>
-                   </form>
-                   <div style={{maxHeight:'100px', overflowY:'auto', marginTop:'10px'}}>
-                      {premiumUsers.map((p, i) => (
-                        <div key={i} style={styles.userItem}><span>{p}</span><button onClick={()=>removePremium(i)} style={styles.btnBan}>X</button></div>
-                      ))}
-                   </div>
-                </div>
-              </div>
+               </div>
+            </div>
+
+            {/* CONTROL DE SANCIONES */}
+            <div style={styles.adminSection}>
+               <h3 style={{color: '#E50914'}}>🚫 GESTIÓN DE SANCIONES</h3>
+               <div style={styles.scrollList}>
+                  <p style={{fontSize: '11px', color: '#555'}}>BANEADOS:</p>
+                  {Object.keys(bannedList).map(id => (
+                    <div key={id} style={styles.adminUserItem}>
+                       <span style={{fontSize: '12px'}}>{id}</span>
+                       <button onClick={()=>toggleBan(id)} style={styles.unbanBtn}>DESBANEAR</button>
+                    </div>
+                  ))}
+                  <p style={{fontSize: '11px', color: '#555', marginTop: '10px'}}>MUTEADOS ACTUALES:</p>
+                  {Object.keys(mutedList).map(id => (
+                    <div key={id} style={styles.adminUserItem}>
+                       <span style={{fontSize: '12px'}}>{id}</span>
+                       <button onClick={()=>cancelMute(id)} style={styles.unmuteBtn}>QUITAR MUTE</button>
+                    </div>
+                  ))}
+               </div>
+            </div>
+
+            {/* GESTIÓN PREMIUM */}
+            <div style={styles.adminSection}>
+               <h3 style={{color: '#FFD700'}}>👑 PREMIUM MANAGMENT</h3>
+               <form onSubmit={addPremium} style={{display: 'flex', gap: '5px', marginBottom: '15px'}}>
+                  <input value={newPuName} onChange={e=>setNewPuName(e.target.value)} style={styles.adminInput} placeholder="Nombre Usuario..." />
+                  <button style={styles.adminAddBtn}>+</button>
+               </form>
+               <div style={styles.scrollList}>
+                  {premiumUsers.map((name, i) => (
+                    <div key={i} style={styles.adminUserItem}>
+                       <span>{name}</span>
+                       <button onClick={()=>removePremium(i)} style={styles.smallBanBtn}>X</button>
+                    </div>
+                  ))}
+               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* --- MODAL LISTA PREMIUM --- */}
-      {viewingPuList && (
-        <div style={styles.modalBack} onClick={()=>setViewingPuList(false)}>
-           <div style={styles.puListCard} onClick={e=>e.stopPropagation()}>
-              <h1 style={{color: '#FFD700', textAlign: 'center', letterSpacing:'5px'}}>👑 PREMIUM ELITE</h1>
+      {/* MODAL PREMIUM PÚBLICO */}
+      {viewPuModal && (
+        <div style={styles.modalOverlay} onClick={()=>setViewPuModal(false)}>
+           <div style={styles.puCard} onClick={e=>e.stopPropagation()}>
+              <h1 style={styles.puTitle}>👑 ELITE USERS</h1>
               <div style={styles.puGrid}>
-                 {premiumUsers.map((name, i) => <div key={i} style={styles.puNameItem}>{name}</div>)}
+                 {premiumUsers.map((name, i) => (
+                   <div key={i} style={styles.puItem}>{name}</div>
+                 ))}
               </div>
-              <button onClick={()=>setViewingPuList(false)} style={styles.puClose}>CERRAR</button>
+              <button onClick={()=>setViewPuModal(false)} style={styles.puCloseBtn}>ENTENDIDO</button>
            </div>
         </div>
       )}
 
       <footer style={styles.footer}>
-        <span>STATUS: <span style={{color: '#00ff41'}}>ONLINE</span> | ID: {userId}</span>
-        <span>TOKEN ACTUAL: {generateCurrentToken()}</span>
+        <span>SERVIDOR: <span style={{color: '#00ff41'}}>ESTABLE</span></span>
+        <span>ID_DISPOSITIVO: {myId}</span>
+        <span>TOKEN: {generateCurrentToken()}</span>
       </footer>
     </div>
   );
 }
 
 // ==========================================
-// ESTILOS DE ALTA GAMA
+// ESTILOS MASIVOS (ALTA CALIDAD)
 // ==========================================
 const styles = {
-  loginPage: { background: '#000', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace' },
-  loginCard: { background: '#080808', padding: '50px', borderRadius: '30px', border: '1px solid #E50914', textAlign: 'center' },
-  glitchTitle: { color: '#fff', fontSize: '30px', letterSpacing: '10px' },
-  loginInput: { background: '#000', border: '1px solid #222', color: '#fff', padding: '15px', borderRadius: '10px', width: '250px', fontSize: '20px', textAlign: 'center', marginBottom: '10px' },
-  loginBtn: { width: '100%', padding: '15px', background: '#E50914', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
-
   appContainer: { background: '#050505', height: '100vh', display: 'flex', flexDirection: 'column', color: '#fff' },
-  navbar: { height: '70px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', borderBottom: '1px solid #111' },
-  logoBox: { borderLeft: '3px solid #E50914', paddingLeft: '10px' },
-  logoMain: { fontSize: '20px', fontWeight: 'bold' },
-  logoSub: { fontSize: '9px', color: '#E50914', display: 'block' },
-  tabContainer: { display: 'flex', background: '#0a0a0a', padding: '5px', borderRadius: '10px', marginLeft: '20px' },
-  tab: { background: 'none', border: 'none', color: '#444', padding: '8px 15px', cursor: 'pointer', fontWeight: 'bold' },
-  activeTab: { background: '#E50914', color: '#fff', padding: '8px 15px', borderRadius: '8px', border: 'none' },
-  searchForm: { flex: 1, maxWidth: '400px', margin: '0 20px' },
-  searchInput: { width: '100%', background: '#0a0a0a', border: '1px solid #1a1a1a', padding: '10px 20px', borderRadius: '20px', color: '#fff', outline: 'none' },
-  panicButton: { background: '#fff', color: '#000', border: 'none', padding: '8px 20px', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer' },
-  adminButton: { background: '#E50914', border: 'none', color: '#fff', padding: '8px 15px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
-  premiumBadge: { background: 'linear-gradient(45deg, #FFD700, #DAA520)', border: 'none', padding: '8px 15px', borderRadius: '20px', color: '#000', fontWeight: 'bold', cursor: 'pointer' },
+  navbar: { height: '80px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 30px', borderBottom: '1px solid #111' },
+  logoBox: { borderLeft: '4px solid #E50914', paddingLeft: '15px' },
+  logoMain: { fontSize: '24px', fontWeight: '900', letterSpacing: '2px' },
+  logoSub: { color: '#E50914', fontSize: '10px', display: 'block' },
+  tabContainer: { display: 'flex', gap: '5px', background: '#0a0a0a', padding: '5px', borderRadius: '15px' },
+  tab: { background: 'none', border: 'none', color: '#444', padding: '10px 18px', cursor: 'pointer', fontWeight: 'bold' },
+  activeTab: { background: '#E50914', color: '#fff', borderRadius: '10px', padding: '10px 18px', border: 'none', fontWeight: 'bold' },
+  searchForm: { flex: 1, maxWidth: '450px', margin: '0 30px' },
+  searchInput: { width: '100%', background: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: '30px', padding: '12px 25px', color: '#fff', outline: 'none' },
+  panicBtn: { background: '#fff', color: '#000', border: 'none', padding: '10px 25px', borderRadius: '30px', fontWeight: 'bold', cursor: 'pointer' },
+  adminEntryBtn: { background: '#E50914', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
+  premiumBadge: { background: 'linear-gradient(45deg, #FFD700, #DAA520)', color: '#000', border: 'none', padding: '10px 20px', borderRadius: '25px', fontWeight: '900', cursor: 'pointer' },
 
-  contentArea: { flex: 1, overflowY: 'auto', padding: '20px', position: 'relative' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' },
-  card: { background: '#080808', borderRadius: '15px', overflow: 'hidden', border: '1px solid #111', cursor: 'pointer' },
-  thumbnail: { width: '100%', aspectRatio: '16/9', objectFit: 'cover' },
-  cardInfo: { padding: '15px' },
-  videoTitle: { fontSize: '13px', fontWeight: 'bold', margin: 0 },
+  contentArea: { flex: 1, padding: '30px', overflowY: 'auto', position: 'relative' },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '25px' },
+  card: { background: '#080808', borderRadius: '15px', overflow: 'hidden', border: '1px solid #111', cursor: 'pointer', transition: '0.3s' },
+  thumb: { width: '100%', aspectRatio: '16/9', objectFit: 'cover' },
+  cardInfo: { padding: '15px', fontSize: '14px', fontWeight: 'bold' },
 
-  modalBack: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 },
-  modalContentSmall: { background: '#080808', padding: '30px', borderRadius: '20px', border: '1px solid #E50914', textAlign: 'center' },
-  adminPanelLarge: { background: '#050505', width: '80%', height: '80%', borderRadius: '20px', border: '2px solid #E50914', display: 'flex', flexDirection: 'column' },
-  adminHeader: { background: '#111', padding: '20px', display: 'flex', justifyContent: 'space-between' },
-  adminBody: { display: 'grid', gridTemplateColumns: '1fr 1fr', flex: 1, padding: '20px', gap: '20px' },
-  adminCol: { background: '#0a0a0a', borderRadius: '15px', padding: '15px', display: 'flex', flexDirection: 'column' },
-  adminScroll: { flex: 1, overflowY: 'auto' },
-  userItem: { background: '#000', padding: '10px', borderRadius: '8px', marginBottom: '5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' },
-  btnBan: { background: '#E50914', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' },
-  btnMute: { background: '#FFD700', border: 'none', color: '#000', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' },
-  btnUnban: { background: '#00ff41', border: 'none', color: '#000', padding: '4px 8px', borderRadius: '4px' },
-  adminInput: { background: '#000', border: '1px solid #222', color: '#fff', padding: '8px', borderRadius: '5px', flex: 1 },
-  addBtn: { background: '#FFD700', border: 'none', width: '30px', borderRadius: '5px' },
-  closeBtnSmall: { background: '#E50914', border: 'none', color: '#fff', padding: '5px 15px', borderRadius: '5px' },
+  loginPage: { height: '100vh', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  loginCard: { background: '#080808', padding: '60px', borderRadius: '40px', border: '1px solid #E50914', textAlign: 'center' },
+  glitchText: { fontSize: '30px', letterSpacing: '8px', marginBottom: '30px' },
+  loginInput: { background: '#000', border: '1px solid #222', padding: '15px', borderRadius: '12px', width: '280px', textAlign: 'center', color: '#fff', fontSize: '20px', marginBottom: '20px' },
+  loginBtn: { width: '100%', padding: '15px', background: '#E50914', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' },
 
-  muteOverlay: { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: '#000', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  muteBox: { textAlign: 'center', border: '4px solid #E50914', padding: '60px', borderRadius: '40px' },
-  timer: { fontSize: '100px', fontWeight: 'bold', color: '#fff', textShadow: '0 0 20px #E50914' },
-  
-  puListCard: { background: '#000', border: '2px solid #FFD700', padding: '40px', borderRadius: '30px', width: '400px' },
-  puGrid: { display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginTop: '20px' },
-  puNameItem: { background: '#0a0a0a', padding: '15px', borderRadius: '10px', textAlign: 'center', color: '#FFD700', border: '1px solid #222' },
-  puClose: { width: '100%', marginTop: '20px', background: 'none', border: '1px solid #FFD700', color: '#FFD700', padding: '10px', borderRadius: '10px' },
+  adminFrame: { position: 'fixed', top: '5%', left: '5%', width: '90%', height: '90%', background: '#050505', border: '2px solid #E50914', zIndex: 1000, borderRadius: '30px', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  adminHeader: { background: '#111', padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #222' },
+  adminBody: { flex: 1, padding: '30px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '30px' },
+  adminSection: { background: '#0a0a0a', borderRadius: '20px', padding: '20px', border: '1px solid #1a1a1a', display: 'flex', flexDirection: 'column' },
+  scrollList: { flex: 1, overflowY: 'auto', marginTop: '15px' },
+  adminUserItem: { background: '#050505', padding: '12px', borderRadius: '10px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #111' },
+  smallMuteBtn: { background: '#FFD700', color: '#000', border: 'none', padding: '5px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold' },
+  smallBanBtn: { background: '#E50914', color: '#fff', border: 'none', padding: '5px 10px', borderRadius: '5px', fontSize: '10px' },
+  unbanBtn: { background: '#00ff41', color: '#000', border: 'none', padding: '5px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold' },
+  unmuteBtn: { background: '#fff', color: '#000', border: 'none', padding: '5px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold' },
+  closeAdmin: { background: '#E50914', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: '8px' },
+  adminInput: { background: '#000', border: '1px solid #333', color: '#fff', padding: '10px', borderRadius: '8px', flex: 1 },
+  adminAddBtn: { background: '#FFD700', border: 'none', padding: '0 15px', borderRadius: '8px', fontWeight: 'bold' },
 
-  fullscreenBlack: { height: '100vh', background: '#000', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
-  errorText: { fontSize: '40px', color: '#E50914' },
-  footer: { height: '30px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', fontSize: '10px', color: '#333' },
-  playerWrapper: { gridColumn: '1/-1', height: '70vh', position: 'relative' },
-  fullIframe: { width: '100%', height: '100%', border: 'none', borderRadius: '20px' },
-  closeBtnVideo: { position: 'absolute', top: '-40px', right: 0, background: '#E50914', border: 'none', color: '#fff', padding: '5px 15px', borderRadius: '5px' },
-  fullView: { height: '100%', background: '#000', borderRadius: '20px', overflow: 'hidden' }
+  muteOverlay: { position: 'fixed', inset: 0, background: '#000', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  muteCard: { textAlign: 'center', border: '3px solid #E50914', padding: '60px', borderRadius: '40px', background: '#080808' },
+  muteTimer: { fontSize: '100px', fontWeight: '900', color: '#fff', textShadow: '0 0 30px #E50914' },
+
+  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  adminLoginBox: { background: '#0a0a0a', padding: '40px', borderRadius: '30px', border: '1px solid #E50914', textAlign: 'center' },
+
+  puCard: { background: '#000', border: '2px solid #FFD700', padding: '50px', borderRadius: '40px', width: '500px' },
+  puTitle: { textAlign: 'center', color: '#FFD700', letterSpacing: '8px', marginBottom: '30px' },
+  puGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' },
+  puItem: { background: '#0a0a0a', padding: '15px', borderRadius: '12px', textAlign: 'center', border: '1px solid #222', color: '#FFD700' },
+  puCloseBtn: { width: '100%', background: 'none', border: '1px solid #FFD700', color: '#FFD700', padding: '15px', borderRadius: '15px', marginTop: '30px', cursor: 'pointer' },
+
+  errorScreen: { height: '100vh', background: '#000', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' },
+  glitchTextLarge: { fontSize: '50px', color: '#E50914', letterSpacing: '10px' },
+  footer: { height: '40px', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 30px', fontSize: '10px', color: '#333' },
+  fullFrame: { height: '100%', background: '#000', borderRadius: '20px', overflow: 'hidden' },
+  iframe: { width: '100%', height: '100%', border: 'none' },
+  playerWrap: { gridColumn: '1/-1', height: '80vh', position: 'relative' },
+  closeVideoBtn: { position: 'absolute', top: '-50px', right: 0, background: '#E50914', color: '#fff', border: 'none', padding: '10px 25px', borderRadius: '10px' }
 };
+
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.textContent = `
+    .spin { width: 50px; height: 50px; border: 4px solid #111; border-top-color: #E50914; border-radius: 50%; animation: s 1s linear infinite; }
+    @keyframes s { to { transform: rotate(360deg); } }
+    .card:hover { transform: translateY(-10px); border-color: #E50914; box-shadow: 0 15px 30px rgba(229,9,20,0.2); }
+  `;
+  document.head.appendChild(style);
+}
