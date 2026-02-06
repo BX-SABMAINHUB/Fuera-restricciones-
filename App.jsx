@@ -39,7 +39,7 @@ const googleProvider = new GoogleAuthProvider();
 setPersistence(auth, browserLocalPersistence);
 
 // --- CONSTANTES ---
-const YOUTUBE_API_KEY = "AIzaSyCCw9ZJj79A-eCb92vtampviKGrZhwpjtk";
+const YOUTUBE_API_KEY = "AIzaSyDIImeaSboJvAsi6EChn8IugdLrh3nG9_4";
 const ADMIN_PASS = "Alex2706";
 const SYSTEM_VERSION = "13.0.7-ULTRA-FIXED";
 
