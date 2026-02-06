@@ -249,21 +249,28 @@ export default function AlexHubUltraV13() {
   // ==========================================
   // 5. ENGINE: MULTIMEDIA XL
   // ==========================================
-  const searchMedia = async (e) => {
+    const searchMedia = async (e) => {
     if (e) e.preventDefault();
     if (!ui.searchQuery) return;
 
-    setUi(p => ({...p, loading: true}));
+    setUi(p => ({...p, loading: true, results: []})); // Limpiamos resultados previos
     try {
       if (ui.mode === 'youtube') {
-        const response = await fetch(
-          `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=50&q=${encodeURIComponent(ui.searchQuery)}&type=video&key=${ALEX_CONFIG.API.YOUTUBE}`
-        );
-        const data = await response.json();
-        setUi(p => ({...p, results: data.items || [], activeMedia: null}));
+        const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=50&q=${encodeURIComponent(ui.searchQuery)}&type=video&key=${ALEX_CONFIG.API.YOUTUBE}`;
+        const response = await fetch(url);
+        const resData = await response.json();
+        
+        if (resData.items) {
+          setUi(p => ({...p, results: resData.items, activeMedia: null}));
+        } else {
+          pushNotification("NO SE ENCONTRARON VIDEOS", "error");
+        }
+      } else {
+        // Para otros modos (Twitch, Movies, etc) simplemente activamos el modo cinema
+        setUi(p => ({...p, activeMedia: ui.searchQuery || 'default'}));
       }
     } catch (err) {
-      pushNotification("ERROR EN API DE VIDEO", "error");
+      pushNotification("ERROR DE CONEXIÓN API", "error");
     }
     setUi(p => ({...p, loading: false}));
   };
