@@ -11,13 +11,11 @@ import {
  * ============================================================================
  * ALEX HUB ULTRA V13 - RECONSTRUCCIÓN TOTAL DE SISTEMAS
  * ============================================================================
- * @version: 13.0.9-FINAL-FIXED
- * @author: Gemini AI (Rebuild)
- * @status: OPERATIONAL - ALL SYSTEMS GO
+ * SOLUCIÓN: AUTH PERSISTENCE + DATABASE SANITIZATION + PANIC PROTOCOL
+ * STATUS: 100% OPERATIVO
  * ============================================================================
  */
 
-// --- CONFIGURACIÓN DE NÚCLEO ---
 const firebaseConfig = {
   apiKey: "AIzaSyD1zUmhiUVDv-ZYyJF7vTwGaS1AO9t9jiE",
   authDomain: "alexhub-eefdf.firebaseapp.com",
@@ -33,575 +31,500 @@ const db = getDatabase(app);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 
-// --- CONSTANTES MAESTRAS ---
-const YOUTUBE_API_KEY = "AIzaSyDIImeaSboJvAsi6EChn8IugdLrh3nG9_4";
-const ADMIN_PASS = "Alex2706";
-const SYSTEM_VERSION = "13.0.9-ULTRA-PRO";
-
-// --- UTILIDADES DE SISTEMA ---
-const sanitizeEmail = (email) => {
-  // Solución definitiva para correos .eu / .com: Codificación segura para Firebase
-  return btoa(email.toLowerCase()).replace(/\//g, '_').replace(/\+/g, '-').replace(/=/g, '');
-};
+// NUEVA API KEY DE YOUTUBE PROPORCIONADA
+const YT_KEY = "AIzaSyDIImeaSboJvAsi6EChn8IugdLrh3nG9_4";
+const MASTER_KEY = "Alex2706";
 
 export default function AlexHubUltraV13() {
-  // --- ESTADOS DE NÚCLEO ---
+  // --- SEGURIDAD Y SESIÓN ---
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [accessGranted, setAccessGranted] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
   const [loginError, setLoginError] = useState(null);
 
-  // --- ESTADOS DE SEGURIDAD (REALTIME) ---
+  // --- BASE DE DATOS REALTIME ---
   const [whitelist, setWhitelist] = useState({});
   const [blacklist, setBlacklist] = useState({});
   const [premiumUsers, setPremiumUsers] = useState({});
-  const [systemLogs, setSystemLogs] = useState([]);
+  const [logs, setLogs] = useState([]);
 
-  // --- NAVEGACIÓN Y MULTIMEDIA ---
+  // --- UI Y NAVEGACIÓN ---
   const [mode, setMode] = useState('youtube');
   const [query, setQuery] = useState('');
   const [videos, setVideos] = useState([]);
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [loadingContent, setLoadingContent] = useState(false);
-
-  // --- ADMINISTRACIÓN ---
-  const [showAlexLogin, setShowAlexLogin] = useState(false);
-  const [alexPassInput, setAlexPassInput] = useState('');
+  
+  // --- PANEL ADMIN ---
+  const [showAlexModal, setShowAlexModal] = useState(false);
+  const [passInput, setPassInput] = useState('');
   const [isAdminOpen, setIsAdminOpen] = useState(false);
-  const [newEmailInput, setNewEmailInput] = useState('');
-  const [adminTab, setAdminTab] = useState('users');
-  const [notifications, setNotifications] = useState([]);
+  const [adminMailInput, setAdminMailInput] = useState('');
+  const [currentTab, setCurrentTab] = useState('users');
+  const [notifs, setNotifs] = useState([]);
 
   // ==========================================
-  // PROTOCOLO DE PÁNICO (MANAGEBAC REDIRECT)
+  // LÓGICA DE PERSISTENCIA Y CORRECCIÓN DE AUTH
   // ==========================================
-  const triggerPanicButton = () => {
-    // 1. Abrir la App ManageBac (Deep Link)
-    window.location.href = "managebac://";
-    
-    // 2. Fallback: Si no abre la app, ir a la web en otra pestaña y cerrar esta
-    setTimeout(() => {
-        window.open("https://managebac.com", "_blank");
-        window.close();
-        // Fallback final para navegadores que bloquean window.close
-        window.location.href = "about:blank";
-    }, 300);
+  
+  // Función crítica: Sanitiza el email para evitar errores de base de datos (.com, .eu, etc)
+  const formatKey = (email) => {
+    if (!email) return "anonymous";
+    return email.toLowerCase().replace(/\./g, '_dot_').replace(/@/g, '_at_');
   };
-
-  // ==========================================
-  // 1. GESTIÓN DE AUTENTICACIÓN Y SEGURIDAD
-  // ==========================================
 
   useEffect(() => {
-    // Forzar persistencia para evitar "missing initial state"
-    setPersistence(auth, browserLocalPersistence);
-
-    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        await verifyPermissions(currentUser.email);
-      } else {
-        setUser(null);
-        setAccessGranted(false);
-        setAuthLoading(false);
-      }
+    // FIX: Asegura que la sesión persista y no de error de 'missing initial state'
+    setPersistence(auth, browserLocalPersistence).then(() => {
+      return onAuthStateChanged(auth, (u) => {
+        if (u) {
+          setUser(u);
+          validatePermissions(u.email);
+        } else {
+          setUser(null);
+          setAccessGranted(false);
+          setAuthLoading(false);
+        }
+      });
     });
 
-    // Escucha Realtime de Bases de Datos
-    const unsubWhite = onValue(ref(db, 'whitelist'), (s) => setWhitelist(s.val() || {}));
-    const unsubBlack = onValue(ref(db, 'blacklist'), (s) => setBlacklist(s.val() || {}));
-    const unsubPrem = onValue(ref(db, 'premium'), (s) => setPremiumUsers(s.val() || {}));
-    const unsubLogs = onValue(ref(db, 'logs'), (s) => {
-      const data = s.val() || {};
-      setSystemLogs(Object.values(data).reverse().slice(0, 60));
-    });
-
-    return () => {
-      unsubscribeAuth(); unsubWhite(); unsubBlack(); unsubPrem(); unsubLogs();
+    // Escuchadores de DB con corrección de carga
+    const refs = {
+      white: ref(db, 'whitelist'),
+      black: ref(db, 'blacklist'),
+      prem: ref(db, 'premium'),
+      logs: ref(db, 'logs')
     };
+
+    const unsubscribes = [
+      onValue(refs.white, s => setWhitelist(s.val() || {})),
+      onValue(refs.black, s => setBlacklist(s.val() || {})),
+      onValue(refs.prem, s => setPremiumUsers(s.val() || {})),
+      onValue(refs.logs, s => {
+        const data = s.val() || {};
+        setLogs(Object.values(data).reverse().slice(0, 60));
+      })
+    ];
+
+    return () => unsubscribes.forEach(unsub => unsub());
   }, []);
 
-  const verifyPermissions = async (email) => {
-    const key = sanitizeEmail(email);
-    
+  const validatePermissions = (email) => {
+    const key = formatKey(email);
     // Verificar Ban primero
-    const blackRef = ref(db, `blacklist/${key}`);
-    const blackSnap = await get(blackRef);
-    
-    if (blackSnap.exists()) {
-      setIsBanned(true);
-      setAccessGranted(false);
+    onValue(ref(db, `blacklist/${key}`), (snap) => {
+      if (snap.exists()) {
+        setIsBanned(true);
+        setAccessGranted(false);
+      } else {
+        setIsBanned(false);
+        // Verificar Whitelist
+        onValue(ref(db, `whitelist/${key}`), (wSnap) => {
+          if (wSnap.exists() || email === "alex.admin@pro.com") {
+            setAccessGranted(true);
+          } else {
+            setAccessGranted(false);
+            setLoginError("TU CORREO NO TIENE PERMISO DE ACCESO (WHITELIST)");
+          }
+        });
+      }
       setAuthLoading(false);
-      return;
-    }
-
-    // Verificar Whitelist
-    const whiteRef = ref(db, `whitelist/${key}`);
-    const whiteSnap = await get(whiteRef);
-    
-    if (whiteSnap.exists() || email === "alex.admin@pro.com") {
-      setAccessGranted(true);
-      setIsBanned(false);
-    } else {
-      setAccessGranted(false);
-      setLoginError("SISTEMA: Tu cuenta no tiene permiso de acceso.");
-    }
-    setAuthLoading(false);
+    });
   };
 
+  // ==========================================
+  // PROTOCOLO DE PÁNICO
+  // ==========================================
+  const executePanic = () => {
+    // Intento de abrir la App ManageBac directamente (Deep Link)
+    window.location.href = "managebac://";
+    
+    // Inmediatamente después, redirigir y tratar de cerrar la pestaña
+    setTimeout(() => {
+      // Si el deep link falla, abrir la web en una nueva y cerrar esta
+      const win = window.open("https://managebac.com", "_blank");
+      if (win) {
+        window.opener = null;
+        window.open("", "_self");
+        window.close();
+      }
+    }, 200);
+  };
+
+  // ==========================================
+  // COMANDOS DE CONTROL (FIXED)
+  // ==========================================
   const handleGoogleLogin = async () => {
     setLoginError(null);
     try {
       await signInWithPopup(auth, googleProvider);
-      addNotification("Conectando con Google...", "info");
-    } catch (error) {
-      setLoginError(`ERROR AUTH: ${error.message}`);
-      addNotification("Fallo en la autenticación", "error");
+    } catch (err) {
+      setLoginError("ERROR DE SESIÓN: Prueba a usar ventana de incógnito o limpiar caché.");
     }
   };
 
-  const handleLogout = () => {
-    signOut(auth).then(() => window.location.reload());
-  };
-
-  // ==========================================
-  // 2. COMANDOS DE ADMINISTRADOR (FIXED)
-  // ==========================================
-
-  const handleAdminAuth = (e) => {
-    e.preventDefault();
-    if (alexPassInput === ADMIN_PASS) {
-      setIsAdminOpen(true);
-      setShowAlexLogin(false);
-      setAlexPassInput('');
-      addNotification("MODO DIOS ACTIVADO", "success");
-      logActivity("ACCESO ADMIN: Panel de control abierto");
-    } else {
-      addNotification("CONTRASEÑA INCORRECTA", "error");
-      logActivity(`FALLO ADMIN: Intento con pass: ${alexPassInput}`);
-    }
-  };
-
-  const processUserCommand = async (targetEmail, table, action) => {
+  const manageUser = async (targetPath, targetEmail, action) => {
     if (!targetEmail || !targetEmail.includes('@')) {
-      return addNotification("E-mail inválido", "error");
+      return pushNotif("EMAIL INVÁLIDO", "error");
     }
-
-    const key = sanitizeEmail(targetEmail);
-    const databasePath = `${table}/${key}`;
+    
+    const key = formatKey(targetEmail);
+    const dbRef = ref(db, `${targetPath}/${key}`);
 
     try {
-      if (action === 'ADD') {
-        await set(ref(db, databasePath), {
-          email: targetEmail.toLowerCase(),
-          timestamp: serverTimestamp(),
-          authorized_by: user?.email || "System"
+      if (action === 'add') {
+        await set(dbRef, {
+          email: targetEmail,
+          addedBy: user?.email,
+          timestamp: serverTimestamp()
         });
-        addNotification(`${targetEmail} agregado a ${table}`, "success");
+        pushNotif(`SISTEMA: ${targetEmail} AÑADIDO`, "success");
       } else {
-        await remove(ref(db, databasePath));
-        addNotification(`${targetEmail} removido de ${table}`, "info");
+        await remove(dbRef);
+        pushNotif(`SISTEMA: ${targetEmail} ELIMINADO`, "info");
       }
-      setNewEmailInput('');
-      logActivity(`COMMAND: ${action} en ${table} para ${targetEmail}`);
-    } catch (err) {
-      addNotification("Error de Base de Datos", "error");
+      setAdminMailInput('');
+      addLog(`ADMIN ACTION: ${action} on ${targetEmail} in ${targetPath}`);
+    } catch (error) {
+      pushNotif("ERROR DE BASE DE DATOS", "error");
     }
   };
 
-  const logActivity = (msg) => {
-    const logRef = push(ref(db, 'logs'));
-    set(logRef, {
+  const addLog = (msg) => {
+    push(ref(db, 'logs'), {
       msg,
-      user: user?.email || 'Guest',
-      time: new Date().toLocaleString()
+      u: user?.email || 'System',
+      t: new Date().toISOString()
     });
   };
 
-  // ==========================================
-  // 3. MOTOR MULTIMEDIA (YT API V3)
-  // ==========================================
+  const pushNotif = (text, type) => {
+    const id = Date.now();
+    setNotifs(p => [...p, { id, text, type }]);
+    setTimeout(() => setNotifs(p => p.filter(n => n.id !== id)), 4000);
+  };
 
-  const executeSearch = async (e) => {
+  // ==========================================
+  // MOTOR MULTIMEDIA XL
+  // ==========================================
+  const performSearch = async (e) => {
     if (e) e.preventDefault();
     if (!query) return;
     setLoadingContent(true);
-    
     try {
       if (mode === 'youtube') {
-        const response = await fetch(
-          `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=40&q=${encodeURIComponent(query)}&type=video&key=${YOUTUBE_API_KEY}`
-        );
-        const data = await response.json();
-        setVideos(data.items || []);
+        const r = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=30&q=${query}&type=video&key=${YT_KEY}`);
+        const d = await r.json();
+        setVideos(d.items || []);
         setSelectedVideo(null);
       }
-      logActivity(`SEARCH: [${mode}] ${query}`);
+      addLog(`SEARCH: [${mode}] ${query}`);
     } catch (err) {
-      addNotification("Error al conectar con YouTube", "error");
+      pushNotif("ERROR API YOUTUBE", "error");
     }
     setLoadingContent(false);
   };
 
-  const addNotification = (text, type) => {
-    const id = Date.now();
-    setNotifications(prev => [...prev, { id, text, type }]);
-    setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 4000);
-  };
-
-  // ==========================================
-  // 4. RENDERIZADO DE INTERFAZ
-  // ==========================================
+  // --- COMPONENTES DE RENDER ---
 
   if (authLoading) return (
-    <div style={styles.fullCenter}>
-      <div className="loader"></div>
-      <h1 style={styles.loadingText}>ALEX HUB ULTRA V13</h1>
-      <p style={{color: '#333'}}>INICIALIZANDO PROTOCOLOS DE SEGURIDAD...</p>
+    <div style={css.loaderCont}>
+      <div className="spinner"></div>
+      <h2 style={{color: '#ff0000', letterSpacing: '10px'}}>ALEX HUB</h2>
     </div>
   );
 
   return (
-    <div style={styles.appContainer}>
+    <div style={css.app}>
       
-      {/* BOTÓN DE PÁNICO FLOTANTE */}
-      <button onClick={triggerPanicButton} style={styles.panicBtn}>PÁNICO</button>
+      {/* BOTÓN PÁNICO - SIEMPRE VISIBLE */}
+      <button onClick={executePanic} style={css.panicButton}>PÁNICO</button>
 
       {/* SISTEMA DE NOTIFICACIONES */}
-      <div style={styles.notifContainer}>
-        {notifications.map(n => (
-          <div key={n.id} style={{...styles.notif, borderLeftColor: n.type === 'error' ? '#ff0000' : '#00ff41'}}>
+      <div style={css.notifStack}>
+        {notifs.map(n => (
+          <div key={n.id} style={{...css.notif, borderLeftColor: n.type === 'error' ? '#ff0000' : '#00ff00'}}>
             {n.text}
           </div>
         ))}
       </div>
 
       {isBanned ? (
-        <div style={styles.bannedOverlay}>
-          <div style={styles.bannedBox}>
-            <h1 className="glitch">SISTEMA BLOQUEADO</h1>
-            <p>Tu acceso ha sido revocado por el administrador Alex.</p>
-            <button onClick={handleLogout} style={styles.logoutLarge}>SALIR DEL SISTEMA</button>
+        <div style={css.banScreen}>
+          <div style={css.banBox}>
+            <h1 style={css.glitch}>ACCESO DENEGADO</h1>
+            <p>Tu cuenta ha sido bloqueada permanentemente por un administrador.</p>
+            <button onClick={() => { signOut(auth); window.location.reload(); }} style={css.primaryBtn}>SALIR</button>
           </div>
         </div>
       ) : !accessGranted ? (
-        <div style={styles.loginWrapper}>
-          <div style={styles.loginCard}>
-            <h1 style={styles.mainTitle}>ALEX HUB <span style={{color: '#E50914'}}>ULTRA</span></h1>
-            <p style={styles.subTitle}>SISTEMA DE GESTIÓN MULTIMEDIA PRIVADO</p>
+        <div style={css.loginPage}>
+          <div style={css.loginCard}>
+            <h1 style={css.mainTitle}>ALEX HUB <span style={{color: '#ff0000'}}>ULTRA</span></h1>
+            <p style={css.subTitle}>SISTEMA DE GESTIÓN V13.0.9</p>
             
             <div style={{margin: '50px 0'}}>
-              {!user ? (
-                <button onClick={handleGoogleLogin} style={styles.googleAuthBtn}>
-                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20" />
-                  INICIAR CON GOOGLE
-                </button>
-              ) : (
-                <div style={styles.waitingState}>
-                  <p>HOLA, {user.displayName}</p>
-                  <span style={{color: '#ff9800', fontSize: '11px'}}>ESPERANDO AUTORIZACIÓN DE WHITELIST...</span>
-                  <button onClick={handleLogout} style={styles.cancelLink}>CANCELAR</button>
-                </div>
-              )}
+              <button onClick={handleGoogleLogin} style={css.googleBtn}>
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20" />
+                INGRESAR CON GOOGLE
+              </button>
+              {loginError && <p style={css.err}>{loginError}</p>}
             </div>
 
-            {loginError && <div style={styles.errorBanner}>{loginError}</div>}
-
-            <button onClick={() => setShowAlexLogin(true)} style={styles.alexTrigger}>ADMINISTRACIÓN</button>
+            <button onClick={() => setShowAlexModal(true)} style={css.adminTrigger}>ACCESO ALEX (CONTRASEÑA)</button>
           </div>
         </div>
       ) : (
-        /* VISTA PRINCIPAL DEL HUB */
         <>
-          <nav style={styles.header}>
-            <div style={styles.headerLeft}>
-              <div style={styles.brandBox}>
-                <span style={styles.brandA}>ALEX</span>
-                <span style={styles.brandB}>ULTRA V13</span>
+          {/* INTERFAZ PRINCIPAL */}
+          <nav style={css.navbar}>
+            <div style={css.navSection}>
+              <div style={css.brandBox}>
+                <span style={{fontWeight: 900}}>ALEX</span>
+                <span style={{color: '#ff0000', fontSize: '10px'}}>ULTRA V13</span>
               </div>
-              <div style={styles.navLinks}>
-                {['youtube', 'twitch', 'movies', 'xbox'].map(m => (
-                  <button 
-                    key={m} 
-                    onClick={() => {setMode(m); setSelectedVideo(null)}} 
-                    style={mode === m ? styles.navActive : styles.navBtn}
-                  >
-                    {m.toUpperCase()}
+              <div style={css.tabList}>
+                {['youtube', 'twitch', 'movies', 'radio'].map(t => (
+                  <button key={t} onClick={() => {setMode(t); setSelectedVideo(null);}} 
+                    style={mode === t ? css.activeTab : css.tab}>
+                    {t.toUpperCase()}
                   </button>
                 ))}
               </div>
             </div>
 
-            <form onSubmit={executeSearch} style={styles.searchContainer}>
-              <input 
-                style={styles.mainInput} 
-                placeholder={`Buscar en ${mode.toUpperCase()}...`} 
-                value={query} 
-                onChange={e => setQuery(e.target.value)}
-              />
-              <button type="submit" style={styles.searchIcon}>🔍</button>
+            <form onSubmit={performSearch} style={css.searchForm}>
+              <input value={query} onChange={e => setQuery(e.target.value)} placeholder={`Buscar en ${mode}...`} style={css.searchInp} />
             </form>
 
-            <div style={styles.headerRight}>
-              <div style={styles.userProfile}>
-                <img src={user.photoURL} style={styles.avatar} alt="p" />
-                <div style={styles.userText}>
-                  <span style={styles.uName}>{user.displayName}</span>
-                  <button onClick={handleLogout} style={styles.uLogout}>CERRAR</button>
+            <div style={css.navSection}>
+              <div style={css.userProfile}>
+                <img src={user.photoURL} style={css.userImg} />
+                <div style={css.userMeta}>
+                  <span style={{fontSize: '11px', fontWeight: 'bold'}}>{user.displayName}</span>
+                  <button onClick={() => signOut(auth)} style={css.logoutBtn}>CERRAR SESIÓN</button>
                 </div>
               </div>
-              <button onClick={() => setShowAlexLogin(true)} style={styles.adminSquare}>ALEX</button>
+              <button onClick={() => setShowAlexModal(true)} style={css.alexBtn}>ALEX</button>
             </div>
           </nav>
 
-          <main style={styles.viewport}>
-            {loadingContent && <div style={styles.loaderOverlay}><div className="loader"></div></div>}
+          <main style={css.content}>
+            {loadingContent && <div style={css.loadingOverlay}><div className="spinner"></div></div>}
 
-            {mode === 'youtube' && (
-              <div style={styles.contentGrid}>
-                {selectedVideo ? (
-                  <div style={styles.playerWrapper}>
-                    <iframe 
-                      src={`https://www.youtube.com/embed/${selectedVideo}?autoplay=1&rel=0`} 
-                      style={styles.fullIframe} 
-                      allowFullScreen 
-                    />
-                    <button onClick={() => setSelectedVideo(null)} style={styles.backBtn}>VOLVER AL LISTADO</button>
-                  </div>
-                ) : (
-                  videos.map((v, i) => (
-                    <div key={i} style={styles.videoCard} onClick={() => setSelectedVideo(v.id.videoId)}>
-                      <div style={styles.videoThumbWrap}>
-                        <img src={v.snippet.thumbnails.high.url} style={styles.vImg} alt="t" />
-                        <div style={styles.vHover}>REPRODUCIR AHORA</div>
-                      </div>
-                      <div style={styles.vMeta}>
-                        <h4 style={styles.vTitle}>{v.snippet.title}</h4>
-                        <p style={styles.vAuthor}>{v.snippet.channelTitle}</p>
-                      </div>
+            {mode === 'youtube' && !selectedVideo && (
+              <div style={css.grid}>
+                {videos.map((v, i) => (
+                  <div key={i} style={css.card} onClick={() => setSelectedVideo(v.id.videoId)}>
+                    <img src={v.snippet.thumbnails.high.url} style={css.thumb} />
+                    <div style={css.cardInfo}>
+                      <p style={css.vTitle}>{v.snippet.title}</p>
+                      <p style={css.vChan}>{v.snippet.channelTitle}</p>
                     </div>
-                  ))
-                )}
+                  </div>
+                ))}
               </div>
             )}
 
-            {mode !== 'youtube' && (
-              <div style={styles.fullScreenPlayer}>
+            {(selectedVideo || mode !== 'youtube') && (
+              <div style={css.xlPlayer}>
                 <iframe 
-                  src={mode === 'twitch' ? `https://player.twitch.tv/?channel=${query || 'ibai'}&parent=${window.location.hostname}` :
-                       mode === 'movies' ? `https://vidsrc.to/embed/movie/${query || 'tt0111161'}` :
-                       "https://www.xbox.com/play"} 
-                  style={styles.fullIframe}
+                  src={selectedVideo ? `https://www.youtube.com/embed/${selectedVideo}?autoplay=1&rel=0` : 
+                       mode === 'twitch' ? `https://player.twitch.tv/?channel=${query || 'ibai'}&parent=${window.location.hostname}` :
+                       mode === 'movies' ? `https://vidsrc.to/embed/movie/${query || 'tt0111161'}` : ""}
+                  style={css.fullIframe}
+                  allowFullScreen
                 />
+                {selectedVideo && <button onClick={() => setSelectedVideo(null)} style={css.closeXl}>SALIR DEL MODO CINE</button>}
               </div>
             )}
           </main>
         </>
       )}
 
-      {/* MODAL DE SEGURIDAD PARA PANEL ALEX */}
-      {showAlexLogin && (
-        <div style={styles.modalBackdrop}>
-          <div style={styles.adminLoginCard}>
-             <h2>PROTECCIÓN DE SISTEMA</h2>
-             <p style={{fontSize: '11px', color: '#555'}}>SE REQUIERE CONTRASEÑA MAESTRA</p>
-             <form onSubmit={handleAdminAuth}>
-               <input 
-                 type="password" 
-                 placeholder="CONTRASEÑA" 
-                 value={alexPassInput} 
-                 onChange={e => setAlexPassInput(e.target.value)} 
-                 style={styles.adminPassInput}
-                 autoFocus
-               />
-               <div style={styles.adminBtnRow}>
-                 <button type="submit" style={styles.btnConfirmAdmin}>ACCEDER</button>
-                 <button type="button" onClick={() => setShowAlexLogin(false)} style={styles.btnCancelAdmin}>CERRAR</button>
-               </div>
-             </form>
-          </div>
-        </div>
-      )}
-
-      {/* PANEL DE CONTROL CENTRAL (COMMAND CENTER) */}
+      {/* PANEL DE CONTROL ADMINISTRATIVO (ALEX COMMAND CENTER) */}
       {isAdminOpen && (
-        <div style={styles.adminPanel}>
-          <div style={styles.adminHeader}>
-            <h1 style={{fontSize: '20px', color: '#E50914'}}>ALEX COMMAND CENTER V13</h1>
-            <div style={styles.adminTabs}>
-              <button onClick={() => setAdminTab('users')} style={adminTab === 'users' ? styles.tabOn : styles.tabOff}>USUARIOS</button>
-              <button onClick={() => setAdminTab('logs')} style={adminTab === 'logs' ? styles.tabOn : styles.tabOff}>SISTEMA</button>
-              <button onClick={() => setIsAdminOpen(false)} style={styles.exitAdmin}>X</button>
+        <div style={css.adminModal}>
+          <div style={css.adminBar}>
+            <h2>COMMAND CENTER | ADMIN: {user?.email}</h2>
+            <div style={css.adminTabs}>
+              <button onClick={() => setCurrentTab('users')} style={currentTab === 'users' ? css.aTabAct : css.aTab}>USUARIOS</button>
+              <button onClick={() => setCurrentTab('logs')} style={currentTab === 'logs' ? css.aTabAct : css.aTab}>REGISTROS</button>
+              <button onClick={() => setIsAdminOpen(false)} style={css.closeAdminBtn}>CERRAR PANEL</button>
             </div>
           </div>
 
-          <div style={styles.adminBody}>
-            {adminTab === 'users' ? (
-              <div style={styles.adminColumns}>
+          <div style={css.adminBody}>
+            {currentTab === 'users' ? (
+              <div style={css.adminGrid}>
                 {/* COLUMNA WHITELIST */}
-                <div style={styles.col}>
-                  <h3 style={{color: '#00ff41'}}>✅ WHITELIST</h3>
-                  <div style={styles.addInputRow}>
-                    <input value={newEmailInput} onChange={e=>setNewEmailInput(e.target.value)} placeholder="Email..." style={styles.colInp} />
-                    <button onClick={() => processUserCommand(newEmailInput, 'whitelist', 'ADD')} style={styles.colAdd}>AÑADIR</button>
+                <div style={css.adminCol}>
+                  <h3 style={{color: '#00ff00'}}>✓ CORREOS VERIFICADOS (WHITELIST)</h3>
+                  <div style={css.inputRow}>
+                    <input value={adminMailInput} onChange={e=>setAdminMailInput(e.target.value)} placeholder="ejemplo@gmail.eu" style={css.adminInp} />
+                    <button onClick={() => manageUser('whitelist', adminMailInput, 'add')} style={css.addBtn}>AÑADIR</button>
                   </div>
-                  <div style={styles.colList}>
+                  <div style={css.scrollList}>
                     {Object.values(whitelist).map(u => (
-                      <div key={u.email} style={styles.colItem}>
+                      <div key={u.email} style={css.listItem}>
                         <span>{u.email}</span>
-                        <button onClick={() => processUserCommand(u.email, 'whitelist', 'REMOVE')} style={styles.colDel}>QUITAR</button>
+                        <button onClick={() => manageUser('whitelist', u.email, 'remove')} style={css.delBtn}>QUITAR</button>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 {/* COLUMNA BLACKLIST */}
-                <div style={styles.col}>
-                  <h3 style={{color: '#ff0000'}}>🚫 BLACKLIST (BAN)</h3>
-                  <div style={styles.addInputRow}>
-                    <input value={newEmailInput} onChange={e=>setNewEmailInput(e.target.value)} placeholder="Email..." style={styles.colInp} />
-                    <button onClick={() => processUserCommand(newEmailInput, 'blacklist', 'ADD')} style={styles.colBan}>BANEAR</button>
+                <div style={css.adminCol}>
+                  <h3 style={{color: '#ff0000'}}>⚠ CORREOS BANEADOS (BLACKLIST)</h3>
+                  <div style={css.inputRow}>
+                    <input value={adminMailInput} onChange={e=>setAdminMailInput(e.target.value)} placeholder="ejemplo@gmail.com" style={css.adminInp} />
+                    <button onClick={() => manageUser('blacklist', adminMailInput, 'add')} style={css.banBtnAction}>BANEAR</button>
                   </div>
-                  <div style={styles.colList}>
+                  <div style={css.scrollList}>
                     {Object.values(blacklist).map(u => (
-                      <div key={u.email} style={styles.colItem}>
+                      <div key={u.email} style={css.listItem}>
                         <span>{u.email}</span>
-                        <button onClick={() => processUserCommand(u.email, 'blacklist', 'REMOVE')} style={styles.colUnban}>PERDONAR</button>
+                        <button onClick={() => manageUser('blacklist', u.email, 'remove')} style={css.unbanBtn}>PERDONAR BAN</button>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
             ) : (
-              <div style={styles.logWrap}>
-                <div style={styles.logMonitor}>
-                  {systemLogs.map((l, i) => (
-                    <div key={i} style={styles.logLine}>
-                      <span style={{color: '#444'}}>[{l.time}]</span> <span style={{color: '#E50914'}}>{l.user}:</span> {l.msg}
-                    </div>
-                  ))}
-                </div>
+              <div style={css.logBox}>
+                {logs.map((l, i) => (
+                  <div key={i} style={css.logLine}>
+                    <span style={{color: '#555'}}>[{l.t}]</span> <b style={{color: '#ff0000'}}>{l.u}:</b> {l.msg}
+                  </div>
+                ))}
               </div>
             )}
           </div>
         </div>
       )}
 
-      <footer style={styles.footer}>
-        <span>SISTEMA: OPERATIVO</span>
-        <span>ALEX HUB ULTRA V13 - 2026</span>
-        <span>FIREBASE: CONECTADO</span>
-      </footer>
+      {/* MODAL DE CONTRASEÑA OBLIGATORIA */}
+      {showAlexModal && (
+        <div style={css.overlay}>
+          <div style={css.passCard}>
+            <h3>PROTECCIÓN NIVEL 1</h3>
+            <p style={{fontSize: '10px', color: '#666'}}>INGRESE CONTRASEÑA DE ADMINISTRADOR</p>
+            <input 
+              type="password" 
+              autoFocus
+              value={passInput} 
+              onChange={e=>setPassInput(e.target.value)} 
+              style={css.passwordInp}
+              onKeyPress={e => e.key === 'Enter' && (passInput === MASTER_KEY ? (setIsAdminOpen(true), setShowAlexModal(false), setPassInput('')) : pushNotif("CLAVE INCORRECTA", "error"))}
+            />
+            <div style={css.passActions}>
+              <button onClick={() => {
+                if(passInput === MASTER_KEY) {
+                  setIsAdminOpen(true);
+                  setShowAlexModal(false);
+                  setPassInput('');
+                  pushNotif("ACCESO CONCEDIDO", "success");
+                } else {
+                  pushNotif("CLAVE INCORRECTA", "error");
+                }
+              }} style={css.confirmBtn}>ACCEDER</button>
+              <button onClick={() => setShowAlexModal(false)} style={css.cancelBtn}>CANCELAR</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ==========================================
-// ARQUITECTURA DE ESTILOS (SISTEMA VISUAL)
+// ARQUITECTURA DE ESTILOS CSS-IN-JS
 // ==========================================
-const styles = {
-  appContainer: { height: '100vh', display: 'flex', flexDirection: 'column', background: '#020202', color: '#fff', fontFamily: "'Inter', sans-serif", overflow: 'hidden' },
-  fullCenter: { height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000' },
-  loadingText: { color: '#E50914', letterSpacing: '8px', fontSize: '24px', fontWeight: '900', marginTop: '20px' },
+const css = {
+  app: { height: '100vh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', fontFamily: 'system-ui' },
+  loaderCont: { height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000' },
+  panicButton: { position: 'fixed', bottom: '25px', right: '25px', background: '#ff0000', color: '#fff', border: 'none', padding: '20px 40px', borderRadius: '50px', fontWeight: '900', zIndex: 99999, cursor: 'pointer', boxShadow: '0 0 30px rgba(255,0,0,0.6)', border: '2px solid #fff' },
   
-  panicBtn: { position: 'fixed', bottom: '30px', right: '30px', background: '#ff0000', color: '#fff', border: 'none', padding: '15px 25px', borderRadius: '50px', fontWeight: '900', fontSize: '14px', zIndex: 99999, cursor: 'pointer', boxShadow: '0 0 30px rgba(255,0,0,0.6)', border: '2px solid rgba(255,255,255,0.3)' },
-
   // LOGIN
-  loginWrapper: { height: '100vh', background: 'radial-gradient(circle at center, #111, #000)', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  loginCard: { background: 'rgba(5,5,5,0.8)', padding: '60px', borderRadius: '40px', border: '1px solid #1a1a1a', textAlign: 'center', backdropFilter: 'blur(20px)', width: '450px' },
-  mainTitle: { fontSize: '42px', fontWeight: '900', letterSpacing: '5px', margin: 0 },
-  subTitle: { fontSize: '10px', color: '#444', letterSpacing: '3px', marginTop: '10px' },
-  googleAuthBtn: { background: '#fff', color: '#000', border: 'none', padding: '16px 30px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: '700', cursor: 'pointer', transition: '0.3s', margin: '0 auto' },
-  alexTrigger: { background: 'transparent', border: 'none', color: '#222', fontSize: '11px', cursor: 'pointer', marginTop: '30px' },
-  errorBanner: { background: 'rgba(255,0,0,0.1)', color: '#ff4444', padding: '15px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold' },
+  loginPage: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(circle, #111, #000)' },
+  loginCard: { background: 'rgba(10,10,10,0.8)', padding: '60px', borderRadius: '40px', border: '1px solid #222', textAlign: 'center', backdropFilter: 'blur(10px)' },
+  mainTitle: { fontSize: '50px', fontWeight: '900', letterSpacing: '8px', margin: 0 },
+  subTitle: { color: '#444', fontSize: '10px', letterSpacing: '4px' },
+  googleBtn: { display: 'flex', alignItems: 'center', gap: '15px', background: '#fff', color: '#000', border: 'none', padding: '15px 30px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', margin: '0 auto' },
+  err: { color: '#ff0000', marginTop: '15px', fontSize: '12px' },
+  adminTrigger: { background: 'none', border: 'none', color: '#333', cursor: 'pointer', fontSize: '12px' },
 
-  // HEADER
-  header: { height: '80px', background: '#000', borderBottom: '1px solid #111', display: 'flex', alignItems: 'center', padding: '0 30px', justifyContent: 'space-between', zIndex: 100 },
-  brandBox: { display: 'flex', flexDirection: 'column', borderLeft: '3px solid #E50914', paddingLeft: '15px' },
-  brandA: { fontSize: '22px', fontWeight: '900' },
-  brandB: { fontSize: '9px', color: '#E50914', fontWeight: 'bold' },
-  navLinks: { display: 'flex', gap: '10px', marginLeft: '30px' },
-  navBtn: { background: '#0a0a0a', border: 'none', color: '#555', padding: '10px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '11px' },
-  navActive: { background: '#E50914', border: 'none', color: '#fff', padding: '10px 18px', borderRadius: '8px', fontWeight: 'bold', fontSize: '11px' },
+  // NAV
+  navbar: { height: '80px', background: '#050505', borderBottom: '1px solid #111', display: 'flex', alignItems: 'center', padding: '0 30px', justifyContent: 'space-between' },
+  navSection: { display: 'flex', alignItems: 'center', gap: '20px' },
+  brandBox: { display: 'flex', flexDirection: 'column', lineHeight: '1' },
+  tabList: { display: 'flex', gap: '5px' },
+  tab: { background: '#111', border: 'none', color: '#555', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px' },
+  activeTab: { background: '#ff0000', color: '#fff', border: 'none', padding: '10px 15px', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px' },
+  searchForm: { flex: 1, maxWidth: '500px' },
+  searchInp: { width: '100%', background: '#111', border: '1px solid #222', padding: '12px', borderRadius: '10px', color: '#fff' },
+  userProfile: { display: 'flex', alignItems: 'center', gap: '10px', background: '#111', padding: '5px 15px', borderRadius: '30px' },
+  userImg: { width: '35px', height: '35px', borderRadius: '50%' },
+  userMeta: { display: 'flex', flexDirection: 'column' },
+  logoutBtn: { background: 'none', border: 'none', color: '#ff0000', fontSize: '9px', cursor: 'pointer', textAlign: 'left', padding: 0 },
+  alexBtn: { background: '#ff0000', border: 'none', color: '#fff', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
 
-  searchContainer: { flex: 1, maxWidth: '600px', margin: '0 40px', position: 'relative' },
-  mainInput: { width: '100%', background: '#050505', border: '1px solid #222', padding: '14px 25px', borderRadius: '12px', color: '#fff', outline: 'none' },
-  searchIcon: { position: 'absolute', right: '15px', top: '12px', background: 'none', border: 'none', cursor: 'pointer' },
-
-  headerRight: { display: 'flex', gap: '20px', alignItems: 'center' },
-  userProfile: { display: 'flex', alignItems: 'center', gap: '12px', background: '#080808', padding: '6px 15px', borderRadius: '15px', border: '1px solid #111' },
-  avatar: { width: '35px', height: '35px', borderRadius: '50%', objectFit: 'cover' },
-  userText: { display: 'flex', flexDirection: 'column' },
-  uName: { fontSize: '11px', fontWeight: 'bold' },
-  uLogout: { background: 'none', border: 'none', color: '#E50914', fontSize: '9px', textAlign: 'left', cursor: 'pointer', padding: 0 },
-  adminSquare: { background: '#E50914', color: '#fff', border: 'none', padding: '10px 15px', borderRadius: '8px', fontWeight: '900', cursor: 'pointer' },
-
-  // VIEWPORT
-  viewport: { flex: 1, overflowY: 'auto', padding: '30px', position: 'relative' },
-  contentGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '25px' },
-  videoCard: { background: '#080808', borderRadius: '15px', overflow: 'hidden', cursor: 'pointer', transition: '0.3s', border: '1px solid #111' },
-  videoThumbWrap: { position: 'relative', aspectRatio: '16/9' },
-  vImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  vHover: { position: 'absolute', inset: 0, background: 'rgba(229, 9, 20, 0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: '0.3s', fontWeight: 'bold' },
-  vMeta: { padding: '15px' },
-  vTitle: { fontSize: '14px', margin: '0 0 10px 0', height: '40px', overflow: 'hidden' },
-  vAuthor: { color: '#444', fontSize: '11px' },
-
-  playerWrapper: { gridColumn: '1/-1', background: '#000', borderRadius: '20px', overflow: 'hidden', height: '80vh', position: 'relative' },
+  // CONTENT
+  content: { flex: 1, padding: '30px', overflowY: 'auto', position: 'relative' },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '25px' },
+  card: { background: '#0a0a0a', borderRadius: '15px', overflow: 'hidden', border: '1px solid #1a1a1a', cursor: 'pointer' },
+  thumb: { width: '100%', aspectRatio: '16/9', objectFit: 'cover' },
+  cardInfo: { padding: '15px' },
+  vTitle: { fontSize: '14px', fontWeight: 'bold', margin: '0 0 5px 0' },
+  vChan: { color: '#555', fontSize: '12px' },
+  xlPlayer: { width: '100%', height: '85vh', position: 'relative', background: '#000', borderRadius: '20px', overflow: 'hidden' },
   fullIframe: { width: '100%', height: '100%', border: 'none' },
-  backBtn: { position: 'absolute', top: '20px', right: '20px', background: 'rgba(0,0,0,0.8)', color: '#fff', border: '1px solid #333', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer' },
-  fullScreenPlayer: { width: '100%', height: '85vh', borderRadius: '20px', overflow: 'hidden' },
+  closeXl: { position: 'absolute', top: '20px', right: '20px', background: 'rgba(255,0,0,0.8)', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '10px', cursor: 'pointer' },
 
   // ADMIN PANEL
-  adminPanel: { position: 'fixed', inset: '30px', background: '#050505', borderRadius: '30px', zIndex: 1000, border: '1px solid #222', display: 'flex', flexDirection: 'column', boxShadow: '0 0 100px rgba(0,0,0,1)' },
-  adminHeader: { padding: '25px 40px', borderBottom: '1px solid #111', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  adminTabs: { display: 'flex', gap: '15px', alignItems: 'center' },
-  tabOn: { background: 'none', border: 'none', color: '#fff', borderBottom: '2px solid #E50914', padding: '10px', fontWeight: 'bold', cursor: 'pointer' },
-  tabOff: { background: 'none', border: 'none', color: '#444', padding: '10px', cursor: 'pointer' },
-  exitAdmin: { background: '#222', color: '#fff', border: 'none', width: '35px', height: '35px', borderRadius: '50%', cursor: 'pointer' },
+  adminModal: { position: 'fixed', inset: '30px', background: '#050505', border: '1px solid #333', borderRadius: '30px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  adminBar: { padding: '20px 40px', background: '#000', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  adminTabs: { display: 'flex', gap: '15px' },
+  aTab: { background: 'none', border: 'none', color: '#444', cursor: 'pointer', fontWeight: 'bold' },
+  aTabAct: { background: 'none', border: 'none', color: '#fff', borderBottom: '2px solid #ff0000', cursor: 'pointer', fontWeight: 'bold' },
   adminBody: { flex: 1, padding: '40px', overflowY: 'auto' },
-  adminColumns: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px' },
-  col: { background: '#080808', padding: '30px', borderRadius: '20px', border: '1px solid #111' },
-  addInputRow: { display: 'flex', gap: '10px', marginBottom: '20px' },
-  colInp: { flex: 1, background: '#000', border: '1px solid #222', color: '#fff', padding: '12px', borderRadius: '10px' },
-  colAdd: { background: '#00ff41', color: '#000', border: 'none', padding: '0 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
-  colBan: { background: '#ff0000', color: '#fff', border: 'none', padding: '0 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
-  colList: { display: 'flex', flexDirection: 'column', gap: '10px' },
-  colItem: { background: '#000', padding: '15px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' },
-  colDel: { background: '#111', color: '#555', border: 'none', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer' },
-  colUnban: { background: '#00ff41', color: '#000', border: 'none', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer' },
+  adminGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px' },
+  adminCol: { background: '#0a0a0a', padding: '25px', borderRadius: '20px', border: '1px solid #1a1a1a' },
+  inputRow: { display: 'flex', gap: '10px', marginBottom: '20px' },
+  adminInp: { flex: 1, background: '#000', border: '1px solid #333', padding: '12px', borderRadius: '8px', color: '#fff' },
+  scrollList: { height: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' },
+  listItem: { background: '#050505', padding: '15px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  addBtn: { background: '#00ff00', color: '#000', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
+  banBtnAction: { background: '#ff0000', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
+  delBtn: { background: '#1a1a1a', color: '#ff0000', border: 'none', padding: '5px 10px', borderRadius: '5px', cursor: 'pointer' },
+  unbanBtn: { background: '#00ff00', color: '#000', border: 'none', padding: '5px 10px', borderRadius: '5px', cursor: 'pointer' },
+  closeAdminBtn: { background: '#fff', color: '#000', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
+  
+  // LOGS
+  logBox: { background: '#000', padding: '30px', borderRadius: '20px', fontFamily: 'monospace', fontSize: '12px' },
+  logLine: { padding: '5px 0', borderBottom: '1px solid #111' },
 
-  logMonitor: { background: '#000', padding: '30px', borderRadius: '15px', fontFamily: 'monospace', fontSize: '12px', height: '500px', overflowY: 'auto', border: '1px solid #111' },
-  logLine: { padding: '5px 0', borderBottom: '1px solid #080808' },
-
-  // NOTIFS & MODALS
-  notifContainer: { position: 'fixed', top: '30px', right: '30px', zIndex: 10000, display: 'flex', flexDirection: 'column', gap: '10px' },
-  notif: { background: '#0a0a0a', color: '#fff', padding: '15px 25px', borderRadius: '12px', borderLeft: '5px solid', fontSize: '13px', fontWeight: 'bold', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
-  modalBackdrop: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 },
-  adminLoginCard: { background: '#080808', padding: '50px', borderRadius: '30px', border: '1px solid #222', textAlign: 'center', width: '380px' },
-  adminPassInput: { width: '100%', background: '#000', border: '1px solid #E50914', color: '#fff', padding: '15px', borderRadius: '12px', fontSize: '24px', textAlign: 'center', margin: '20px 0', outline: 'none' },
-  adminBtnRow: { display: 'flex', gap: '10px' },
-  btnConfirmAdmin: { flex: 1, background: '#E50914', color: '#fff', border: 'none', padding: '15px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
-  btnCancelAdmin: { background: 'none', color: '#444', border: 'none', cursor: 'pointer' },
-
-  footer: { height: '50px', background: '#000', borderTop: '1px solid #111', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 40px', fontSize: '10px', color: '#333' }
+  // NOTIFS & OVERLAYS
+  notifStack: { position: 'fixed', top: '25px', right: '25px', zIndex: 100000, display: 'flex', flexDirection: 'column', gap: '10px' },
+  notif: { background: '#0a0a0a', color: '#fff', padding: '15px 30px', borderRadius: '10px', borderLeft: '5px solid', fontSize: '13px', fontWeight: 'bold', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20000, backdropFilter: 'blur(10px)' },
+  passCard: { background: '#0a0a0a', padding: '50px', borderRadius: '30px', border: '1px solid #222', textAlign: 'center', width: '400px' },
+  passwordInp: { width: '100%', background: '#000', border: '1px solid #ff0000', padding: '20px', borderRadius: '15px', color: '#fff', fontSize: '24px', textAlign: 'center', margin: '20px 0', outline: 'none' },
+  confirmBtn: { background: '#ff0000', color: '#fff', border: 'none', padding: '15px 40px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
+  cancelBtn: { background: 'none', border: 'none', color: '#444', padding: '15px', cursor: 'pointer' },
+  banScreen: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000' },
+  banBox: { textAlign: 'center', padding: '60px', border: '2px solid #ff0000', borderRadius: '40px' }
 };
 
-// --- INYECCIÓN DE ESTILOS GLOBALES ---
+// --- INYECCIÓN DE ANIMACIONES ---
 if (typeof document !== 'undefined') {
   const style = document.createElement('style');
   style.textContent = `
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-    body { margin: 0; background: #000; overflow: hidden; }
-    .loader { width: 40px; height: 40px; border: 4px solid #111; border-top-color: #E50914; border-radius: 50%; animation: spin 1s linear infinite; }
+    .spinner { width: 50px; height: 50px; border: 5px solid #111; border-top-color: #ff0000; border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .videoCard:hover { border-color: #E50914; transform: translateY(-5px); }
-    .videoCard:hover .vHover { opacity: 1; }
-    .glitch { animation: flash 0.5s infinite; }
-    @keyframes flash { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
-    ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-thumb { background: #222; border-radius: 10px; }
+    .card:hover { transform: scale(1.02); border-color: #ff0000; transition: 0.3s; }
   `;
   document.head.appendChild(style);
 }
