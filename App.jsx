@@ -408,22 +408,31 @@ export default function AlexHubUltraV13() {
                 ))}
               </div>
             )}
-
-            {(ui.activeMedia || ui.mode !== 'youtube') && (
+                        {(ui.activeMedia || ui.mode !== 'youtube') && (
               <div style={Styles.CinemaFrame}>
                 <iframe 
-                  src={ui.activeMedia ? `https://www.youtube.com/embed/${ui.activeMedia}?autoplay=1` : 
-                       ui.mode === 'twitch' ? `https://player.twitch.tv/?channel=${ui.searchQuery || 'ibai'}&parent=${window.location.hostname}` :
-                       ui.mode === 'movies' ? `https://vidsrc.to/embed/movie/${ui.searchQuery || 'tt0111161'}` :
-                       ui.mode === 'xbox' ? "https://www.xbox.com/play" : "https://www.radio.net/embed/los40"}
+                  src={
+                    ui.mode === 'youtube' 
+                      ? `https://www.youtube.com/embed/${ui.activeMedia}?autoplay=1&modestbranding=1&rel=0` 
+                      : ui.mode === 'twitch' 
+                      ? `https://player.twitch.tv/?channel=${ui.searchQuery.replace(/\s+/g, '') || 'ibai'}&parent=${window.location.hostname}&autoplay=true` 
+                      : ui.mode === 'movies' 
+                      ? `https://vidsrc.to/embed/movie/${ui.searchQuery || 'tt0111161'}` 
+                      : ui.mode === 'xbox' 
+                      ? "https://www.xbox.com/play" 
+                      : "https://www.radio.net/embed/los40"
+                  }
                   style={Styles.IframeXL}
+                  allow="autoplay; aria-live; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                  frameBorder="0"
                   allowFullScreen
                 />
-                {ui.activeMedia && (
-                  <button onClick={() => setUi(p => ({...p, activeMedia: null}))} style={Styles.CloseCinema}>
-                    CERRAR REPRODUCTOR
-                  </button>
-                )}
+                <button 
+                  onClick={() => setUi(p => ({...p, activeMedia: null}))} 
+                  style={Styles.CloseCinema}
+                >
+                  {ui.mode === 'youtube' ? 'CERRAR VIDEO' : 'VOLVER AL HUB'}
+                </button>
               </div>
             )}
           </main>
