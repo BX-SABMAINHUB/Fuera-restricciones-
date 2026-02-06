@@ -9,13 +9,14 @@ import {
 
 /**
  * ============================================================================
- * ALEX HUB ULTRA V13 - RECONSTRUCCIÓN TOTAL DE SISTEMAS
+ * ALEX HUB ULTRA V13 - THE GOD MODE RECONSTRUCTION
  * ============================================================================
- * SOLUCIÓN: AUTH PERSISTENCE + DATABASE SANITIZATION + PANIC PROTOCOL
- * STATUS: 100% OPERATIVO
+ * SOFTWARE DE GESTIÓN MULTIMEDIA Y CONTROL DE ACCESO PROFESIONAL
+ * VERSIÓN: 13.0.9-REBUILD
  * ============================================================================
  */
 
+// --- CONFIGURACIÓN FIREBASE (PROD) ---
 const firebaseConfig = {
   apiKey: "AIzaSyD1zUmhiUVDv-ZYyJF7vTwGaS1AO9t9jiE",
   authDomain: "alexhub-eefdf.firebaseapp.com",
@@ -26,410 +27,416 @@ const firebaseConfig = {
   appId: "1:463204402982:web:fe740a662fbfd50452a3e7"
 };
 
+// --- INICIALIZACIÓN ---
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 
-// NUEVA API KEY DE YOUTUBE PROPORCIONADA
-const YT_KEY = "AIzaSyDIImeaSboJvAsi6EChn8IugdLrh3nG9_4";
-const MASTER_KEY = "Alex2706";
+// --- CONSTANTES MAESTRAS ---
+const YT_API_KEY = "AIzaSyDIImeaSboJvAsi6EChn8IugdLrh3nG9_4";
+const MASTER_PASS = "Alex2706";
+const SYSTEM_V = "13.0.9-ULTRA-MAX";
 
 export default function AlexHubUltraV13() {
-  // --- SEGURIDAD Y SESIÓN ---
+  // --- ESTADOS DE SEGURIDAD ---
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [accessGranted, setAccessGranted] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
   const [loginError, setLoginError] = useState(null);
 
-  // --- BASE DE DATOS REALTIME ---
+  // --- ESTADOS DE DATOS ---
   const [whitelist, setWhitelist] = useState({});
   const [blacklist, setBlacklist] = useState({});
   const [premiumUsers, setPremiumUsers] = useState({});
   const [logs, setLogs] = useState([]);
 
-  // --- UI Y NAVEGACIÓN ---
+  // --- NAVEGACIÓN ---
   const [mode, setMode] = useState('youtube');
   const [query, setQuery] = useState('');
   const [videos, setVideos] = useState([]);
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [loadingContent, setLoadingContent] = useState(false);
-  
-  // --- PANEL ADMIN ---
+
+  // --- PANEL ADMIN (ALEX) ---
   const [showAlexModal, setShowAlexModal] = useState(false);
-  const [passInput, setPassInput] = useState('');
+  const [alexPassInput, setAlexPassInput] = useState('');
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [adminMailInput, setAdminMailInput] = useState('');
-  const [currentTab, setCurrentTab] = useState('users');
-  const [notifs, setNotifs] = useState([]);
+  const [adminTab, setAdminTab] = useState('users');
+
+  // --- UI ---
+  const [notifications, setNotifications] = useState([]);
+  const theme = { primary: '#E50914', bg: '#000', card: '#0a0a0a', accent: '#00ff41' };
 
   // ==========================================
-  // LÓGICA DE PERSISTENCIA Y CORRECCIÓN DE AUTH
+  // 1. NÚCLEO DE SEGURIDAD Y SANITIZACIÓN
   // ==========================================
-  
-  // Función crítica: Sanitiza el email para evitar errores de base de datos (.com, .eu, etc)
-  const formatKey = (email) => {
-    if (!email) return "anonymous";
+
+  // Función Vital: Sanitiza emails para que NO den error en la DB (soporta .eu, .com, etc)
+  const sanitizeKey = (email) => {
+    if (!email) return "unknown";
     return email.toLowerCase().replace(/\./g, '_dot_').replace(/@/g, '_at_');
   };
 
   useEffect(() => {
-    // FIX: Asegura que la sesión persista y no de error de 'missing initial state'
-    setPersistence(auth, browserLocalPersistence).then(() => {
-      return onAuthStateChanged(auth, (u) => {
-        if (u) {
-          setUser(u);
-          validatePermissions(u.email);
-        } else {
-          setUser(null);
-          setAccessGranted(false);
-          setAuthLoading(false);
-        }
+    // Configurar persistencia para evitar el error "missing initial state"
+    setPersistence(auth, browserLocalPersistence)
+      .then(() => {
+        return onAuthStateChanged(auth, (u) => {
+          if (u) {
+            setUser(u);
+            checkUserPermissions(u.email);
+            addLog(`Inicio de sesión detectado: ${u.email}`);
+          } else {
+            setUser(null);
+            setAccessGranted(false);
+            setAuthLoading(false);
+          }
+        });
       });
-    });
 
-    // Escuchadores de DB con corrección de carga
-    const refs = {
-      white: ref(db, 'whitelist'),
-      black: ref(db, 'blacklist'),
-      prem: ref(db, 'premium'),
-      logs: ref(db, 'logs')
-    };
-
-    const unsubscribes = [
-      onValue(refs.white, s => setWhitelist(s.val() || {})),
-      onValue(refs.black, s => setBlacklist(s.val() || {})),
-      onValue(refs.prem, s => setPremiumUsers(s.val() || {})),
-      onValue(refs.logs, s => {
+    // Suscripciones en tiempo real
+    const unsub = [
+      onValue(ref(db, 'whitelist'), (s) => setWhitelist(s.val() || {})),
+      onValue(ref(db, 'blacklist'), (s) => setBlacklist(s.val() || {})),
+      onValue(ref(db, 'premium'), (s) => setPremiumUsers(s.val() || {})),
+      onValue(ref(db, 'logs'), (s) => {
         const data = s.val() || {};
-        setLogs(Object.values(data).reverse().slice(0, 60));
+        setLogs(Object.values(data).reverse().slice(0, 50));
       })
     ];
 
-    return () => unsubscribes.forEach(unsub => unsub());
+    return () => unsub.forEach(f => f());
   }, []);
 
-  const validatePermissions = (email) => {
-    const key = formatKey(email);
-    // Verificar Ban primero
+  const checkUserPermissions = useCallback((email) => {
+    const key = sanitizeKey(email);
+    
+    // Verificación secuencial de seguridad
     onValue(ref(db, `blacklist/${key}`), (snap) => {
       if (snap.exists()) {
         setIsBanned(true);
         setAccessGranted(false);
       } else {
         setIsBanned(false);
-        // Verificar Whitelist
-        onValue(ref(db, `whitelist/${key}`), (wSnap) => {
-          if (wSnap.exists() || email === "alex.admin@pro.com") {
+        onValue(ref(db, `whitelist/${key}`), (whiteSnap) => {
+          if (whiteSnap.exists() || email === "alex.admin@pro.com") {
             setAccessGranted(true);
           } else {
             setAccessGranted(false);
-            setLoginError("TU CORREO NO TIENE PERMISO DE ACCESO (WHITELIST)");
+            setLoginError("NO TIENES ACCESO: Contacta con Alex para entrar en la Whitelist.");
           }
         });
       }
       setAuthLoading(false);
     });
-  };
+  }, []);
 
   // ==========================================
-  // PROTOCOLO DE PÁNICO
+  // 2. SISTEMA DE PÁNICO (MANAGEBAC)
   // ==========================================
-  const executePanic = () => {
-    // Intento de abrir la App ManageBac directamente (Deep Link)
+  const triggerPanicButton = () => {
+    // Intenta abrir la App directamente usando el esquema de URL
     window.location.href = "managebac://";
     
-    // Inmediatamente después, redirigir y tratar de cerrar la pestaña
+    // Inmediatamente cierra la pestaña actual y redirige a la web por si falla la app
     setTimeout(() => {
-      // Si el deep link falla, abrir la web en una nueva y cerrar esta
-      const win = window.open("https://managebac.com", "_blank");
-      if (win) {
-        window.opener = null;
-        window.open("", "_self");
-        window.close();
-      }
-    }, 200);
+      window.open("https://managebac.com", "_blank");
+      window.close();
+      // Si window.close() es bloqueado por el navegador, forzamos redirección
+      window.location.replace("https://managebac.com");
+    }, 150);
   };
 
   // ==========================================
-  // COMANDOS DE CONTROL (FIXED)
+  // 3. COMANDOS ADMINISTRATIVOS (FIXED)
   // ==========================================
   const handleGoogleLogin = async () => {
-    setLoginError(null);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (err) {
-      setLoginError("ERROR DE SESIÓN: Prueba a usar ventana de incógnito o limpiar caché.");
+      addNotification("Conectando con Google...", "info");
+    } catch (error) {
+      setLoginError("ERROR DE AUTENTICACIÓN: El navegador bloqueó el estado inicial.");
     }
   };
 
-  const manageUser = async (targetPath, targetEmail, action) => {
-    if (!targetEmail || !targetEmail.includes('@')) {
-      return pushNotif("EMAIL INVÁLIDO", "error");
-    }
+  const manageSystemAccess = async (table, email, action) => {
+    if (!email.includes('@')) return addNotification("EMAIL NO VÁLIDO", "error");
+    const key = sanitizeKey(email);
     
-    const key = formatKey(targetEmail);
-    const dbRef = ref(db, `${targetPath}/${key}`);
-
     try {
       if (action === 'add') {
-        await set(dbRef, {
-          email: targetEmail,
-          addedBy: user?.email,
-          timestamp: serverTimestamp()
+        await set(ref(db, `${table}/${key}`), {
+          email: email,
+          timestamp: serverTimestamp(),
+          authorizedBy: user?.email || 'Alex Master'
         });
-        pushNotif(`SISTEMA: ${targetEmail} AÑADIDO`, "success");
+        addNotification(`${email} AÑADIDO CON ÉXITO`, "success");
       } else {
-        await remove(dbRef);
-        pushNotif(`SISTEMA: ${targetEmail} ELIMINADO`, "info");
+        await remove(ref(db, `${table}/${key}`));
+        addNotification(`${email} ELIMINADO CON ÉXITO`, "info");
       }
       setAdminMailInput('');
-      addLog(`ADMIN ACTION: ${action} on ${targetEmail} in ${targetPath}`);
-    } catch (error) {
-      pushNotif("ERROR DE BASE DE DATOS", "error");
+      addLog(`ADMIN ACTION: ${action} on ${email} in ${table}`);
+    } catch (e) {
+      addNotification("ERROR EN BASE DE DATOS", "error");
     }
   };
 
   const addLog = (msg) => {
     push(ref(db, 'logs'), {
       msg,
-      u: user?.email || 'System',
+      u: auth.currentUser?.email || 'Visitante',
       t: new Date().toISOString()
     });
   };
 
-  const pushNotif = (text, type) => {
+  const addNotification = (text, type) => {
     const id = Date.now();
-    setNotifs(p => [...p, { id, text, type }]);
-    setTimeout(() => setNotifs(p => p.filter(n => n.id !== id)), 4000);
+    setNotifications(prev => [...prev, { id, text, type }]);
+    setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 4000);
   };
 
   // ==========================================
-  // MOTOR MULTIMEDIA XL
+  // 4. MOTOR MULTIMEDIA XL
   // ==========================================
-  const performSearch = async (e) => {
+  const runSearch = async (e) => {
     if (e) e.preventDefault();
     if (!query) return;
     setLoadingContent(true);
     try {
       if (mode === 'youtube') {
-        const r = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=30&q=${query}&type=video&key=${YT_KEY}`);
-        const d = await r.json();
-        setVideos(d.items || []);
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=40&q=${query}&type=video&key=${YT_API_KEY}`);
+        const data = await res.json();
+        setVideos(data.items || []);
         setSelectedVideo(null);
       }
       addLog(`SEARCH: [${mode}] ${query}`);
     } catch (err) {
-      pushNotif("ERROR API YOUTUBE", "error");
+      addNotification("ERROR DE API YOUTUBE", "error");
     }
     setLoadingContent(false);
   };
 
-  // --- COMPONENTES DE RENDER ---
+  // --- COMPONENTES DE INTERFAZ ---
 
   if (authLoading) return (
-    <div style={css.loaderCont}>
-      <div className="spinner"></div>
-      <h2 style={{color: '#ff0000', letterSpacing: '10px'}}>ALEX HUB</h2>
+    <div style={css.fullLoader}>
+      <div className="loader"></div>
+      <h1 style={{letterSpacing: '10px', color: theme.primary}}>CARGANDO ALEX HUB</h1>
     </div>
   );
 
   return (
-    <div style={css.app}>
+    <div style={css.mainApp}>
       
-      {/* BOTÓN PÁNICO - SIEMPRE VISIBLE */}
-      <button onClick={executePanic} style={css.panicButton}>PÁNICO</button>
+      {/* BOTÓN DE PÁNICO FLOTANTE */}
+      <button onClick={triggerPanicButton} style={css.panicBtn}>BOTÓN PÁNICO</button>
 
-      {/* SISTEMA DE NOTIFICACIONES */}
-      <div style={css.notifStack}>
-        {notifs.map(n => (
-          <div key={n.id} style={{...css.notif, borderLeftColor: n.type === 'error' ? '#ff0000' : '#00ff00'}}>
+      {/* STACK DE NOTIFICACIONES */}
+      <div style={css.notifArea}>
+        {notifications.map(n => (
+          <div key={n.id} style={{...css.notif, borderLeft: `5px solid ${n.type === 'error' ? '#ff0000' : '#00ff00'}`}}>
             {n.text}
           </div>
         ))}
       </div>
 
       {isBanned ? (
-        <div style={css.banScreen}>
-          <div style={css.banBox}>
-            <h1 style={css.glitch}>ACCESO DENEGADO</h1>
-            <p>Tu cuenta ha sido bloqueada permanentemente por un administrador.</p>
-            <button onClick={() => { signOut(auth); window.location.reload(); }} style={css.primaryBtn}>SALIR</button>
+        <div style={css.bannedUI}>
+          <div style={css.bannedCard}>
+            <h1 className="glitch">SISTEMA BLOQUEADO</h1>
+            <p>Tu cuenta ha sido expulsada. Consulta con el administrador.</p>
+            <button onClick={() => {signOut(auth); window.location.reload();}} style={css.primaryBtn}>VOLVER</button>
           </div>
         </div>
       ) : !accessGranted ? (
-        <div style={css.loginPage}>
-          <div style={css.loginCard}>
-            <h1 style={css.mainTitle}>ALEX HUB <span style={{color: '#ff0000'}}>ULTRA</span></h1>
-            <p style={css.subTitle}>SISTEMA DE GESTIÓN V13.0.9</p>
+        <div style={css.loginView}>
+          <div style={css.loginBox}>
+            <h1 style={css.title}>ALEX HUB <span style={{color: theme.primary}}>ULTRA</span></h1>
+            <p style={css.ver}>VERSION {SYSTEM_V}</p>
             
-            <div style={{margin: '50px 0'}}>
+            <div style={{margin: '40px 0'}}>
               <button onClick={handleGoogleLogin} style={css.googleBtn}>
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20" />
-                INGRESAR CON GOOGLE
+                <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" width="20" alt="G" />
+                ACCESO GOOGLE
               </button>
-              {loginError && <p style={css.err}>{loginError}</p>}
+              {loginError && <p style={css.errorLabel}>{loginError}</p>}
             </div>
 
-            <button onClick={() => setShowAlexModal(true)} style={css.adminTrigger}>ACCESO ALEX (CONTRASEÑA)</button>
+            <button onClick={() => setShowAlexModal(true)} style={css.alexTrigger}>ADMIN LOGIN (ALEX)</button>
           </div>
         </div>
       ) : (
         <>
-          {/* INTERFAZ PRINCIPAL */}
-          <nav style={css.navbar}>
-            <div style={css.navSection}>
-              <div style={css.brandBox}>
-                <span style={{fontWeight: 900}}>ALEX</span>
-                <span style={{color: '#ff0000', fontSize: '10px'}}>ULTRA V13</span>
+          {/* DASHBOARD PRINCIPAL */}
+          <nav style={css.nav}>
+            <div style={css.navLeft}>
+              <div style={css.logo}>
+                ALEX <span style={{color: theme.primary, fontSize: '12px'}}>V13</span>
               </div>
-              <div style={css.tabList}>
-                {['youtube', 'twitch', 'movies', 'radio'].map(t => (
-                  <button key={t} onClick={() => {setMode(t); setSelectedVideo(null);}} 
-                    style={mode === t ? css.activeTab : css.tab}>
-                    {t.toUpperCase()}
+              <div style={css.tabs}>
+                {['youtube', 'twitch', 'movies', 'radio'].map(m => (
+                  <button key={m} onClick={() => {setMode(m); setSelectedVideo(null);}} 
+                    style={mode === m ? css.activeTab : css.tab}>
+                    {m.toUpperCase()}
                   </button>
                 ))}
               </div>
             </div>
 
-            <form onSubmit={performSearch} style={css.searchForm}>
+            <form onSubmit={runSearch} style={css.searchWrap}>
               <input value={query} onChange={e => setQuery(e.target.value)} placeholder={`Buscar en ${mode}...`} style={css.searchInp} />
+              <button type="submit" style={css.searchBtn}>🔍</button>
             </form>
 
-            <div style={css.navSection}>
-              <div style={css.userProfile}>
-                <img src={user.photoURL} style={css.userImg} />
+            <div style={css.navRight}>
+              <div style={css.userBox}>
+                <img src={user.photoURL} style={css.avatar} alt="u" />
                 <div style={css.userMeta}>
-                  <span style={{fontSize: '11px', fontWeight: 'bold'}}>{user.displayName}</span>
-                  <button onClick={() => signOut(auth)} style={css.logoutBtn}>CERRAR SESIÓN</button>
+                  <span style={css.uName}>{user.displayName}</span>
+                  <button onClick={() => signOut(auth)} style={css.logoutLink}>SALIR</button>
                 </div>
               </div>
-              <button onClick={() => setShowAlexModal(true)} style={css.alexBtn}>ALEX</button>
+              <button onClick={() => setShowAlexModal(true)} style={css.adminActionBtn}>ALEX</button>
             </div>
           </nav>
 
-          <main style={css.content}>
-            {loadingContent && <div style={css.loadingOverlay}><div className="spinner"></div></div>}
+          <main style={css.viewport}>
+            {loadingContent && <div style={css.loadingScreen}><div className="loader"></div></div>}
 
-            {mode === 'youtube' && !selectedVideo && (
-              <div style={css.grid}>
-                {videos.map((v, i) => (
-                  <div key={i} style={css.card} onClick={() => setSelectedVideo(v.id.videoId)}>
-                    <img src={v.snippet.thumbnails.high.url} style={css.thumb} />
-                    <div style={css.cardInfo}>
-                      <p style={css.vTitle}>{v.snippet.title}</p>
-                      <p style={css.vChan}>{v.snippet.channelTitle}</p>
-                    </div>
+            {mode === 'youtube' && (
+              <div style={css.mediaContainer}>
+                {selectedVideo ? (
+                  <div style={css.xlPlayer}>
+                    <iframe 
+                      src={`https://www.youtube.com/embed/${selectedVideo}?autoplay=1&rel=0&showinfo=0`} 
+                      style={css.iframeXL} 
+                      allowFullScreen 
+                    />
+                    <button onClick={() => setSelectedVideo(null)} style={css.closeMedia}>CERRAR REPRODUCTOR</button>
                   </div>
-                ))}
+                ) : (
+                  <div style={css.grid}>
+                    {videos.map((v, i) => (
+                      <div key={i} style={css.card} onClick={() => setSelectedVideo(v.id.videoId)}>
+                        <img src={v.snippet.thumbnails.high.url} style={css.thumb} alt="t" />
+                        <div style={css.cardBody}>
+                          <h4 style={css.vTitle}>{v.snippet.title}</h4>
+                          <span style={css.vAuthor}>{v.snippet.channelTitle}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
-            {(selectedVideo || mode !== 'youtube') && (
+            {mode !== 'youtube' && (
               <div style={css.xlPlayer}>
                 <iframe 
-                  src={selectedVideo ? `https://www.youtube.com/embed/${selectedVideo}?autoplay=1&rel=0` : 
-                       mode === 'twitch' ? `https://player.twitch.tv/?channel=${query || 'ibai'}&parent=${window.location.hostname}` :
-                       mode === 'movies' ? `https://vidsrc.to/embed/movie/${query || 'tt0111161'}` : ""}
-                  style={css.fullIframe}
-                  allowFullScreen
+                  src={mode === 'twitch' ? `https://player.twitch.tv/?channel=${query || 'ibai'}&parent=${window.location.hostname}` :
+                       mode === 'movies' ? `https://vidsrc.to/embed/movie/${query || 'tt0111161'}` :
+                       "https://www.radio.net/embed/los40"} 
+                  style={css.iframeXL} 
                 />
-                {selectedVideo && <button onClick={() => setSelectedVideo(null)} style={css.closeXl}>SALIR DEL MODO CINE</button>}
               </div>
             )}
           </main>
         </>
       )}
 
-      {/* PANEL DE CONTROL ADMINISTRATIVO (ALEX COMMAND CENTER) */}
+      {/* PANEL COMMAND CENTER (ALEX) */}
       {isAdminOpen && (
-        <div style={css.adminModal}>
-          <div style={css.adminBar}>
-            <h2>COMMAND CENTER | ADMIN: {user?.email}</h2>
-            <div style={css.adminTabs}>
-              <button onClick={() => setCurrentTab('users')} style={currentTab === 'users' ? css.aTabAct : css.aTab}>USUARIOS</button>
-              <button onClick={() => setCurrentTab('logs')} style={currentTab === 'logs' ? css.aTabAct : css.aTab}>REGISTROS</button>
-              <button onClick={() => setIsAdminOpen(false)} style={css.closeAdminBtn}>CERRAR PANEL</button>
+        <div style={css.adminOverlay}>
+          <div style={css.adminPanel}>
+            <div style={css.adminHeader}>
+              <h2>ALEX COMMAND CENTER | NIVEL 1</h2>
+              <div style={css.adminNav}>
+                <button onClick={() => setAdminTab('users')} style={adminTab === 'users' ? css.aNavActive : css.aNav}>USUARIOS</button>
+                <button onClick={() => setAdminTab('logs')} style={adminTab === 'logs' ? css.aNavActive : css.aNav}>LOGS</button>
+                <button onClick={() => setIsAdminOpen(false)} style={css.closeAdmin}>X</button>
+              </div>
             </div>
-          </div>
 
-          <div style={css.adminBody}>
-            {currentTab === 'users' ? (
-              <div style={css.adminGrid}>
-                {/* COLUMNA WHITELIST */}
-                <div style={css.adminCol}>
-                  <h3 style={{color: '#00ff00'}}>✓ CORREOS VERIFICADOS (WHITELIST)</h3>
-                  <div style={css.inputRow}>
-                    <input value={adminMailInput} onChange={e=>setAdminMailInput(e.target.value)} placeholder="ejemplo@gmail.eu" style={css.adminInp} />
-                    <button onClick={() => manageUser('whitelist', adminMailInput, 'add')} style={css.addBtn}>AÑADIR</button>
+            <div style={css.adminContent}>
+              {adminTab === 'users' ? (
+                <div style={css.adminGrid}>
+                  {/* WHITELIST CONTROL */}
+                  <div style={css.adminSec}>
+                    <h3 style={{color: '#00ff00'}}>✓ LISTA DE ACCESO (WHITELIST)</h3>
+                    <div style={css.inpRow}>
+                      <input value={adminMailInput} onChange={e=>setAdminMailInput(e.target.value)} placeholder="correo@gmail.eu" style={css.adminInp} />
+                      <button onClick={() => manageSystemAccess('whitelist', adminMailInput, 'add')} style={css.addBtn}>AÑADIR</button>
+                    </div>
+                    <div style={css.listScroll}>
+                      {Object.values(whitelist).map(u => (
+                        <div key={u.email} style={css.listItem}>
+                          <span>{u.email}</span>
+                          <button onClick={() => manageSystemAccess('whitelist', u.email, 'remove')} style={css.delBtn}>QUITAR</button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div style={css.scrollList}>
-                    {Object.values(whitelist).map(u => (
-                      <div key={u.email} style={css.listItem}>
-                        <span>{u.email}</span>
-                        <button onClick={() => manageUser('whitelist', u.email, 'remove')} style={css.delBtn}>QUITAR</button>
-                      </div>
-                    ))}
+
+                  {/* BLACKLIST CONTROL */}
+                  <div style={css.adminSec}>
+                    <h3 style={{color: '#ff0000'}}>🚫 BANEADOS (BLACKLIST)</h3>
+                    <div style={css.inpRow}>
+                      <input value={adminMailInput} onChange={e=>setAdminMailInput(e.target.value)} placeholder="correo@gmail.com" style={css.adminInp} />
+                      <button onClick={() => manageSystemAccess('blacklist', adminMailInput, 'add')} style={css.banActionBtn}>BANEAR</button>
+                    </div>
+                    <div style={css.listScroll}>
+                      {Object.values(blacklist).map(u => (
+                        <div key={u.email} style={css.listItem}>
+                          <span>{u.email}</span>
+                          <button onClick={() => manageSystemAccess('blacklist', u.email, 'remove')} style={css.unbanBtn}>PERDONAR BAN</button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-
-                {/* COLUMNA BLACKLIST */}
-                <div style={css.adminCol}>
-                  <h3 style={{color: '#ff0000'}}>⚠ CORREOS BANEADOS (BLACKLIST)</h3>
-                  <div style={css.inputRow}>
-                    <input value={adminMailInput} onChange={e=>setAdminMailInput(e.target.value)} placeholder="ejemplo@gmail.com" style={css.adminInp} />
-                    <button onClick={() => manageUser('blacklist', adminMailInput, 'add')} style={css.banBtnAction}>BANEAR</button>
-                  </div>
-                  <div style={css.scrollList}>
-                    {Object.values(blacklist).map(u => (
-                      <div key={u.email} style={css.listItem}>
-                        <span>{u.email}</span>
-                        <button onClick={() => manageUser('blacklist', u.email, 'remove')} style={css.unbanBtn}>PERDONAR BAN</button>
-                      </div>
-                    ))}
-                  </div>
+              ) : (
+                <div style={css.logBox}>
+                  {logs.map((l, i) => (
+                    <div key={i} style={css.logLine}>
+                      <span style={{color: '#555'}}>[{l.t}]</span> <b style={{color: theme.primary}}>{l.u}:</b> {l.msg}
+                    </div>
+                  ))}
                 </div>
-              </div>
-            ) : (
-              <div style={css.logBox}>
-                {logs.map((l, i) => (
-                  <div key={i} style={css.logLine}>
-                    <span style={{color: '#555'}}>[{l.t}]</span> <b style={{color: '#ff0000'}}>{l.u}:</b> {l.msg}
-                  </div>
-                ))}
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}
 
       {/* MODAL DE CONTRASEÑA OBLIGATORIA */}
       {showAlexModal && (
-        <div style={css.overlay}>
+        <div style={css.passModal}>
           <div style={css.passCard}>
-            <h3>PROTECCIÓN NIVEL 1</h3>
-            <p style={{fontSize: '10px', color: '#666'}}>INGRESE CONTRASEÑA DE ADMINISTRADOR</p>
+            <h3>SISTEMA PROTEGIDO</h3>
+            <p style={{fontSize: '11px', color: '#666'}}>INGRESE LA CLAVE MAESTRA</p>
             <input 
               type="password" 
               autoFocus
-              value={passInput} 
-              onChange={e=>setPassInput(e.target.value)} 
-              style={css.passwordInp}
-              onKeyPress={e => e.key === 'Enter' && (passInput === MASTER_KEY ? (setIsAdminOpen(true), setShowAlexModal(false), setPassInput('')) : pushNotif("CLAVE INCORRECTA", "error"))}
+              value={alexPassInput} 
+              onChange={e=>setAlexPassInput(e.target.value)} 
+              style={css.masterInp}
+              onKeyPress={e => e.key === 'Enter' && (alexPassInput === MASTER_PASS ? (setIsAdminOpen(true), setShowAlexModal(false), setAlexPassInput('')) : addNotification("PASS ERRÓNEA", "error"))}
             />
-            <div style={css.passActions}>
+            <div style={css.passBtns}>
               <button onClick={() => {
-                if(passInput === MASTER_KEY) {
+                if(alexPassInput === MASTER_PASS) {
                   setIsAdminOpen(true);
                   setShowAlexModal(false);
-                  setPassInput('');
-                  pushNotif("ACCESO CONCEDIDO", "success");
+                  setAlexPassInput('');
+                  addNotification("ACCESO CONCEDIDO", "success");
                 } else {
-                  pushNotif("CLAVE INCORRECTA", "error");
+                  addNotification("CLAVE INCORRECTA", "error");
                 }
-              }} style={css.confirmBtn}>ACCEDER</button>
+              }} style={css.confirmBtn}>ENTRAR</button>
               <button onClick={() => setShowAlexModal(false)} style={css.cancelBtn}>CANCELAR</button>
             </div>
           </div>
@@ -443,88 +450,93 @@ export default function AlexHubUltraV13() {
 // ARQUITECTURA DE ESTILOS CSS-IN-JS
 // ==========================================
 const css = {
-  app: { height: '100vh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', fontFamily: 'system-ui' },
-  loaderCont: { height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000' },
-  panicButton: { position: 'fixed', bottom: '25px', right: '25px', background: '#ff0000', color: '#fff', border: 'none', padding: '20px 40px', borderRadius: '50px', fontWeight: '900', zIndex: 99999, cursor: 'pointer', boxShadow: '0 0 30px rgba(255,0,0,0.6)', border: '2px solid #fff' },
+  mainApp: { height: '100vh', background: '#000', color: '#fff', fontFamily: 'Inter, sans-serif', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
+  fullLoader: { height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#000' },
+  panicBtn: { position: 'fixed', bottom: '30px', right: '30px', background: '#ff0000', color: '#fff', border: '2px solid #fff', padding: '20px 40px', borderRadius: '50px', fontWeight: '900', zIndex: 999999, cursor: 'pointer', boxShadow: '0 0 20px rgba(255,0,0,0.5)' },
   
-  // LOGIN
-  loginPage: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(circle, #111, #000)' },
-  loginCard: { background: 'rgba(10,10,10,0.8)', padding: '60px', borderRadius: '40px', border: '1px solid #222', textAlign: 'center', backdropFilter: 'blur(10px)' },
-  mainTitle: { fontSize: '50px', fontWeight: '900', letterSpacing: '8px', margin: 0 },
-  subTitle: { color: '#444', fontSize: '10px', letterSpacing: '4px' },
+  // LOGIN UI
+  loginView: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'radial-gradient(circle, #111 0%, #000 100%)' },
+  loginBox: { background: 'rgba(10,10,10,0.8)', padding: '60px', borderRadius: '40px', border: '1px solid #222', textAlign: 'center', backdropFilter: 'blur(15px)' },
+  title: { fontSize: '45px', fontWeight: '900', letterSpacing: '8px', margin: 0 },
+  ver: { color: '#444', fontSize: '10px', marginTop: '10px' },
   googleBtn: { display: 'flex', alignItems: 'center', gap: '15px', background: '#fff', color: '#000', border: 'none', padding: '15px 30px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', margin: '0 auto' },
-  err: { color: '#ff0000', marginTop: '15px', fontSize: '12px' },
-  adminTrigger: { background: 'none', border: 'none', color: '#333', cursor: 'pointer', fontSize: '12px' },
+  alexTrigger: { background: 'none', border: 'none', color: '#333', cursor: 'pointer', marginTop: '20px' },
+  errorLabel: { color: '#ff0000', marginTop: '15px', fontWeight: 'bold' },
 
   // NAV
-  navbar: { height: '80px', background: '#050505', borderBottom: '1px solid #111', display: 'flex', alignItems: 'center', padding: '0 30px', justifyContent: 'space-between' },
-  navSection: { display: 'flex', alignItems: 'center', gap: '20px' },
-  brandBox: { display: 'flex', flexDirection: 'column', lineHeight: '1' },
-  tabList: { display: 'flex', gap: '5px' },
-  tab: { background: '#111', border: 'none', color: '#555', padding: '10px 15px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px' },
-  activeTab: { background: '#ff0000', color: '#fff', border: 'none', padding: '10px 15px', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px' },
-  searchForm: { flex: 1, maxWidth: '500px' },
-  searchInp: { width: '100%', background: '#111', border: '1px solid #222', padding: '12px', borderRadius: '10px', color: '#fff' },
-  userProfile: { display: 'flex', alignItems: 'center', gap: '10px', background: '#111', padding: '5px 15px', borderRadius: '30px' },
-  userImg: { width: '35px', height: '35px', borderRadius: '50%' },
-  userMeta: { display: 'flex', flexDirection: 'column' },
-  logoutBtn: { background: 'none', border: 'none', color: '#ff0000', fontSize: '9px', cursor: 'pointer', textAlign: 'left', padding: 0 },
-  alexBtn: { background: '#ff0000', border: 'none', color: '#fff', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
+  nav: { height: '80px', background: '#000', borderBottom: '1px solid #111', display: 'flex', alignItems: 'center', padding: '0 30px', justifyContent: 'space-between' },
+  navLeft: { display: 'flex', alignItems: 'center', gap: '40px' },
+  logo: { fontWeight: '900', fontSize: '24px', letterSpacing: '2px' },
+  tabs: { display: 'flex', gap: '8px' },
+  tab: { background: '#111', border: 'none', color: '#555', padding: '10px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' },
+  activeTab: { background: '#E50914', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: 'bold' },
+  searchWrap: { flex: 1, maxWidth: '500px', display: 'flex', background: '#0a0a0a', borderRadius: '12px', border: '1px solid #222', overflow: 'hidden' },
+  searchInp: { flex: 1, background: 'none', border: 'none', padding: '12px 20px', color: '#fff', outline: 'none' },
+  searchBtn: { background: 'none', border: 'none', padding: '0 15px', cursor: 'pointer' },
+  navRight: { display: 'flex', alignItems: 'center', gap: '20px' },
+  userBox: { display: 'flex', alignItems: 'center', gap: '12px', background: '#0a0a0a', padding: '8px 15px', borderRadius: '30px' },
+  avatar: { width: '35px', height: '35px', borderRadius: '50%', objectFit: 'cover' },
+  uName: { fontSize: '12px', fontWeight: 'bold' },
+  logoutLink: { background: 'none', border: 'none', color: '#ff0000', fontSize: '9px', padding: 0, cursor: 'pointer', textAlign: 'left' },
+  adminActionBtn: { background: '#E50914', border: 'none', color: '#fff', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
 
   // CONTENT
-  content: { flex: 1, padding: '30px', overflowY: 'auto', position: 'relative' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '25px' },
-  card: { background: '#0a0a0a', borderRadius: '15px', overflow: 'hidden', border: '1px solid #1a1a1a', cursor: 'pointer' },
+  viewport: { flex: 1, overflowY: 'auto', padding: '30px', position: 'relative' },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '25px' },
+  card: { background: '#0a0a0a', borderRadius: '15px', overflow: 'hidden', border: '1px solid #1a1a1a', cursor: 'pointer', transition: '0.3s' },
   thumb: { width: '100%', aspectRatio: '16/9', objectFit: 'cover' },
-  cardInfo: { padding: '15px' },
-  vTitle: { fontSize: '14px', fontWeight: 'bold', margin: '0 0 5px 0' },
-  vChan: { color: '#555', fontSize: '12px' },
-  xlPlayer: { width: '100%', height: '85vh', position: 'relative', background: '#000', borderRadius: '20px', overflow: 'hidden' },
-  fullIframe: { width: '100%', height: '100%', border: 'none' },
-  closeXl: { position: 'absolute', top: '20px', right: '20px', background: 'rgba(255,0,0,0.8)', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '10px', cursor: 'pointer' },
+  cardBody: { padding: '15px' },
+  vTitle: { fontSize: '14px', margin: '0 0 5px 0', height: '40px', overflow: 'hidden' },
+  vAuthor: { color: '#555', fontSize: '11px' },
+  xlPlayer: { width: '100%', height: '85vh', background: '#000', borderRadius: '25px', overflow: 'hidden', position: 'relative' },
+  iframeXL: { width: '100%', height: '100%', border: 'none' },
+  closeMedia: { position: 'absolute', top: '20px', right: '20px', background: '#E50914', color: '#fff', border: 'none', padding: '15px 25px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
 
-  // ADMIN PANEL
-  adminModal: { position: 'fixed', inset: '30px', background: '#050505', border: '1px solid #333', borderRadius: '30px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-  adminBar: { padding: '20px 40px', background: '#000', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  adminTabs: { display: 'flex', gap: '15px' },
-  aTab: { background: 'none', border: 'none', color: '#444', cursor: 'pointer', fontWeight: 'bold' },
-  aTabAct: { background: 'none', border: 'none', color: '#fff', borderBottom: '2px solid #ff0000', cursor: 'pointer', fontWeight: 'bold' },
-  adminBody: { flex: 1, padding: '40px', overflowY: 'auto' },
+  // ADMIN UI
+  adminOverlay: { position: 'fixed', inset: '20px', background: '#000', border: '1px solid #333', borderRadius: '30px', zIndex: 10000, display: 'flex', flexDirection: 'column' },
+  adminHeader: { padding: '20px 40px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  adminNav: { display: 'flex', gap: '15px' },
+  aNav: { background: 'none', border: 'none', color: '#444', cursor: 'pointer', fontWeight: 'bold' },
+  aNavActive: { background: 'none', border: 'none', color: '#fff', borderBottom: '2px solid #E50914', cursor: 'pointer', fontWeight: 'bold' },
+  closeAdmin: { background: '#333', color: '#fff', border: 'none', width: '35px', height: '35px', borderRadius: '50%', cursor: 'pointer' },
+  adminContent: { flex: 1, padding: '40px', overflowY: 'auto' },
   adminGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px' },
-  adminCol: { background: '#0a0a0a', padding: '25px', borderRadius: '20px', border: '1px solid #1a1a1a' },
-  inputRow: { display: 'flex', gap: '10px', marginBottom: '20px' },
+  adminSec: { background: '#0a0a0a', padding: '30px', borderRadius: '20px', border: '1px solid #1a1a1a' },
+  inpRow: { display: 'flex', gap: '10px', marginBottom: '20px' },
   adminInp: { flex: 1, background: '#000', border: '1px solid #333', padding: '12px', borderRadius: '8px', color: '#fff' },
-  scrollList: { height: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' },
+  listScroll: { height: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' },
   listItem: { background: '#050505', padding: '15px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  addBtn: { background: '#00ff00', color: '#000', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
-  banBtnAction: { background: '#ff0000', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
-  delBtn: { background: '#1a1a1a', color: '#ff0000', border: 'none', padding: '5px 10px', borderRadius: '5px', cursor: 'pointer' },
-  unbanBtn: { background: '#00ff00', color: '#000', border: 'none', padding: '5px 10px', borderRadius: '5px', cursor: 'pointer' },
-  closeAdminBtn: { background: '#fff', color: '#000', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
-  
-  // LOGS
-  logBox: { background: '#000', padding: '30px', borderRadius: '20px', fontFamily: 'monospace', fontSize: '12px' },
-  logLine: { padding: '5px 0', borderBottom: '1px solid #111' },
+  addBtn: { background: '#00ff41', color: '#000', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
+  banActionBtn: { background: '#ff0000', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
+  delBtn: { background: '#222', color: '#ff4444', border: 'none', padding: '5px 12px', borderRadius: '5px', cursor: 'pointer' },
+  unbanBtn: { background: '#00ff41', color: '#000', border: 'none', padding: '5px 12px', borderRadius: '5px', cursor: 'pointer' },
 
-  // NOTIFS & OVERLAYS
-  notifStack: { position: 'fixed', top: '25px', right: '25px', zIndex: 100000, display: 'flex', flexDirection: 'column', gap: '10px' },
-  notif: { background: '#0a0a0a', color: '#fff', padding: '15px 30px', borderRadius: '10px', borderLeft: '5px solid', fontSize: '13px', fontWeight: 'bold', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20000, backdropFilter: 'blur(10px)' },
+  // NOTIFS & MODALS
+  notifArea: { position: 'fixed', top: '20px', right: '20px', zIndex: 1000000, display: 'flex', flexDirection: 'column', gap: '10px' },
+  notif: { background: '#0a0a0a', color: '#fff', padding: '18px 30px', borderRadius: '10px', fontSize: '13px', fontWeight: 'bold', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' },
+  passModal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50000, backdropFilter: 'blur(10px)' },
   passCard: { background: '#0a0a0a', padding: '50px', borderRadius: '30px', border: '1px solid #222', textAlign: 'center', width: '400px' },
-  passwordInp: { width: '100%', background: '#000', border: '1px solid #ff0000', padding: '20px', borderRadius: '15px', color: '#fff', fontSize: '24px', textAlign: 'center', margin: '20px 0', outline: 'none' },
-  confirmBtn: { background: '#ff0000', color: '#fff', border: 'none', padding: '15px 40px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
-  cancelBtn: { background: 'none', border: 'none', color: '#444', padding: '15px', cursor: 'pointer' },
-  banScreen: { height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000' },
-  banBox: { textAlign: 'center', padding: '60px', border: '2px solid #ff0000', borderRadius: '40px' }
+  masterInp: { width: '100%', background: '#000', border: '1px solid #E50914', padding: '20px', borderRadius: '15px', color: '#fff', fontSize: '28px', textAlign: 'center', margin: '20px 0', outline: 'none' },
+  passBtns: { display: 'flex', gap: '15px', justifyContent: 'center' },
+  confirmBtn: { background: '#E50914', color: '#fff', border: 'none', padding: '15px 35px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' },
+  cancelBtn: { background: 'none', border: 'none', color: '#444', cursor: 'pointer' },
+  
+  logBox: { background: '#000', padding: '25px', borderRadius: '15px', fontFamily: 'monospace', border: '1px solid #111' },
+  logLine: { padding: '6px 0', borderBottom: '1px solid #0a0a0a' },
+  loadingScreen: { position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }
 };
 
-// --- INYECCIÓN DE ANIMACIONES ---
+// --- INYECCIÓN DE CSS GLOBAL ---
 if (typeof document !== 'undefined') {
   const style = document.createElement('style');
   style.textContent = `
-    .spinner { width: 50px; height: 50px; border: 5px solid #111; border-top-color: #ff0000; border-radius: 50%; animation: spin 1s linear infinite; }
+    .loader { width: 50px; height: 50px; border: 4px solid #111; border-top-color: #E50914; border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .card:hover { transform: scale(1.02); border-color: #ff0000; transition: 0.3s; }
+    .card:hover { transform: translateY(-10px); border-color: #333; }
+    .glitch { animation: pulse 1s infinite; }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: #222; border-radius: 10px; }
   `;
   document.head.appendChild(style);
 }
