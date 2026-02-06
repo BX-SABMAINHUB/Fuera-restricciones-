@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GoogleOAuthProvider, GoogleLogin, googleLogout } from '@react-oauth/google';
-import { jwtDecode } from "jwt-decode";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, onValue, set, remove, update, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, onValue, set, remove, serverTimestamp, onDisconnect, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import jwt_decode from "jwt-decode";
 
-// ==========================================
-// CONFIGURACIÓN MAESTRA (CRÍTICA)
-// ==========================================
-const GOOGLE_CLIENT_ID = "62163541365-qkfhuda81uev9b2poehqd7hic08oism6.apps.googleusercontent.com";
-const ADMIN_PASS = "Alex2706";
-const YOUTUBE_API_KEY = "AIzaSyCCw9ZJj79A-eCb92vtampviKGrZhwpjtk";
+/**
+ * ALEX HUB ULTRA V13 - SUPREME EDITION
+ * DOMAIN: Alexhub.vercel.app
+ * AUTH: Google Official OAuth + Firebase Realtime Admin Control
+ */
 
+// --- CONFIGURACIÓN FIREBASE (Mantengo tu DB original) ---
 const firebaseConfig = {
   apiKey: "AIzaSyD1zUmhiUVDv-ZYyJF7vTwGaS1AO9t9jiE",
   authDomain: "alexhub-eefdf.firebaseapp.com",
@@ -18,182 +18,299 @@ const firebaseConfig = {
   projectId: "alexhub-eefdf",
   storageBucket: "alexhub-eefdf.firebasestorage.app",
   messagingSenderId: "463204402982",
-  appId: "1:463204402982:web:fe740a662fbfd50452a3e7"
+  appId: "1:463204402982:web:fe740a662fbfd50452a3e7",
+  measurementId: "G-M8KSWX9"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-export default function AlexHubUltraV13() {
-  // --- ESTADOS DE AUTH Y USUARIO ---
-  const [user, setUser] = useState(null);
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [isBanned, setIsBanned] = useState(false);
-  const [loading, setLoading] = useState(true);
+// CONFIGURACIÓN MAESTRA
+const GOOGLE_CLIENT_ID = "62163541365-qkfhuda81uev9b2poehqd7hic08oism6.apps.googleusercontent.com";
+const YOUTUBE_API_KEY = "AIzaSyCCw9ZJj79A-eCb92vtampviKGrZhwpjtk";
+const ADMIN_PASS = "Alex2706";
+const PANIC_URL = "https://faria.managebac.com/login";
 
-  // --- ESTADOS DE UI ---
+export default function AlexHubUltraV13() {
+  // --- ESTADOS DE AUTENTICACIÓN ---
+  const [user, setUser] = useState(null); // Datos de Google
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
+  
+  // --- ESTADOS DE ADMIN (EL FRAME GIGANTE) ---
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [adminAuthenticated, setAdminAuthenticated] = useState(false);
+  const [adminPassInput, setAdminPassInput] = useState('');
+  const [userToManage, setUserToManage] = useState(''); // Email para ban/unban
+
+  // --- LISTAS DE CONTROL (Desde Firebase) ---
+  const [whitelist, setWhitelist] = useState([]); // Correos permitidos
+  const [blacklist, setBlacklist] = useState([]); // Correos baneados
+  const [premiumUsers, setPremiumUsers] = useState([]);
+
+  // --- UI Y NAVEGACIÓN ---
   const [mode, setMode] = useState('youtube');
   const [query, setQuery] = useState('');
   const [videos, setVideos] = useState([]);
   const [selectedVideo, setSelectedVideo] = useState(null);
-  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
-
-  // --- ESTADOS DE BASE DE DATOS (ADMIN) ---
-  const [whiteList, setWhiteList] = useState([]); // Correos permitidos
-  const [blackList, setBlackList] = useState([]); // Correos baneados
-  const [premiumList, setPremiumList] = useState([]); // Usuarios VIP
-  const [newEmailInput, setNewEmailInput] = useState('');
+  const [loading, setLoading] = useState(false);
 
   // ==========================================
-  // 1. CARGA DE DATOS Y SEGURIDAD (FIREBASE)
+  // 1. CARGA DE DATOS Y SEGURIDAD
   // ==========================================
   useEffect(() => {
-    // Escuchar Whitelist (Correos que SI pueden entrar)
-    onValue(ref(db, 'whitelist'), (s) => setWhiteList(Object.values(s.val() || {})));
-    // Escuchar Blacklist (Baneados)
-    onValue(ref(db, 'blacklist'), (s) => setBlackList(Object.values(s.val() || {})));
-    // Escuchar Premium
-    onValue(ref(db, 'premium'), (s) => setPremiumList(Object.values(s.val() || {})));
+    // Escuchar cambios en la base de datos de control
+    const whitelistRef = ref(db, 'authorized_emails');
+    const blacklistRef = ref(db, 'banned_emails');
+    const premiumRef = ref(db, 'premium_users');
+
+    onValue(whitelistRef, (s) => setWhitelist(Object.values(s.val() || {})));
+    onValue(blacklistRef, (s) => setBlacklist(Object.values(s.val() || {})));
+    onValue(premiumRef, (s) => setPremiumUsers(Object.values(s.val() || {})));
 
     // Persistencia de sesión local
-    const savedUser = localStorage.getItem('_alexhub_session');
+    const savedUser = localStorage.getItem('_alex_hub_session');
     if (savedUser) {
-      const parsed = JSON.parse(savedUser);
-      checkUserAccess(parsed);
+      const parsedUser = JSON.parse(savedUser);
+      checkUserAccess(parsedUser);
     } else {
-      setLoading(false);
+      setAuthChecking(false);
     }
   }, []);
 
   const checkUserAccess = (userData) => {
     // 1. Verificar si está baneado
-    onValue(ref(db, 'blacklist'), (snapshot) => {
-      const bans = Object.values(snapshot.val() || {});
-      if (bans.includes(userData.email)) {
-        setIsBanned(true);
-        setIsAuthorized(false);
-      } else {
-        // 2. Verificar si está en la whitelist
-        onValue(ref(db, 'whitelist'), (whiteSnapshot) => {
-          const allowed = Object.values(whiteSnapshot.val() || {});
-          if (allowed.includes(userData.email)) {
-            setUser(userData);
-            setIsAuthorized(true);
-            localStorage.setItem('_alexhub_session', JSON.stringify(userData));
-          } else {
-            alert("ACCESO DENEGADO: Tu correo no está en la lista de permitidos.");
-            handleLogout();
-          }
-          setLoading(false);
-        });
-      }
-    });
+    if (blacklist.includes(userData.email)) {
+      alert("TU CUENTA HA SIDO BANEADA PERMANENTEMENTE");
+      handleLogout();
+      return;
+    }
+    // 2. Verificar si está en la whitelist (o si tú quieres acceso libre excepto baneados)
+    // Aquí implemento que solo los de la whitelist entran si así lo decides
+    if (whitelist.length > 0 && !whitelist.includes(userData.email)) {
+      alert("ACCESO RESTRINGIDO. CONTACTA CON ALEX.");
+      handleLogout();
+      return;
+    }
+
+    setUser(userData);
+    setIsAuthorized(true);
+    setAuthChecking(false);
+    localStorage.setItem('_alex_hub_session', JSON.stringify(userData));
   };
 
   // ==========================================
-  // 2. LÓGICA DE GOOGLE LOGIN
+  // 2. GOOGLE LOGIN HANDLERS
   // ==========================================
-  const handleGoogleSuccess = (credentialResponse) => {
-    const decoded = jwtDecode(credentialResponse.credential);
+  const onGoogleSuccess = (credentialResponse) => {
+    const decoded = jwt_decode(credentialResponse.credential);
     const userData = {
       name: decoded.name,
       email: decoded.email,
-      picture: decoded.picture,
-      id: decoded.sub
+      picture: decoded.picture
     };
     checkUserAccess(userData);
+  };
+
+  const onGoogleError = () => {
+    alert("Error conectando con Google. Revisa tu conexión o configuración de consola.");
   };
 
   const handleLogout = () => {
     googleLogout();
     setUser(null);
     setIsAuthorized(false);
-    localStorage.removeItem('_alexhub_session');
+    localStorage.removeItem('_alex_hub_session');
   };
 
   // ==========================================
-  // 3. FUNCIONES DE ADMINISTRADOR (EL "FRAME")
+  // 3. SISTEMA DE ADMINISTRACIÓN (EL NÚCLEO)
   // ==========================================
-  const openAdminWithAuth = () => {
-    const pass = prompt("INTRODUCE LA CLAVE MAESTRA (ALEX):");
-    if (pass === ADMIN_PASS) {
-      setAdminPanelOpen(true);
+  const verifyAdmin = (e) => {
+    e.preventDefault();
+    if (adminPassInput === ADMIN_PASS) {
+      setAdminAuthenticated(true);
+      setAdminPassInput('');
     } else {
-      alert("CLAVE INCORRECTA");
+      alert("CONTRASEÑA INCORRECTA");
     }
   };
 
-  const addToDB = (table) => {
-    if (!newEmailInput.includes('@')) return alert("Email inválido");
-    const newRef = ref(db, `${table}/${newEmailInput.replace(/\./g, '_')}`);
-    set(newRef, newEmailInput);
-    setNewEmailInput('');
+  const addToWhitelist = () => {
+    if (!userToManage) return;
+    const id = btoa(userToManage).replace(/=/g, '');
+    set(ref(db, `authorized_emails/${id}`), userToManage);
+    setUserToManage('');
   };
 
-  const removeFromDB = (table, email) => {
-    remove(ref(db, `${table}/${email.replace(/\./g, '_')}`));
+  const addToBlacklist = () => {
+    if (!userToManage) return;
+    const id = btoa(userToManage).replace(/=/g, '');
+    set(ref(db, `banned_emails/${id}`), userToManage);
+    // Si el usuario está online, lo echamos (opcional mediante trigger)
+    setUserToManage('');
+  };
+
+  const togglePremium = (email) => {
+    const id = btoa(email).replace(/=/g, '');
+    if (premiumUsers.includes(email)) {
+      remove(ref(db, `premium_users/${id}`));
+    } else {
+      set(ref(db, `premium_users/${id}`), email);
+    }
+  };
+
+  const removeFromList = (listPath, email) => {
+    const id = btoa(email).replace(/=/g, '');
+    remove(ref(db, `${listPath}/${id}`));
   };
 
   // ==========================================
-  // 4. BÚSQUEDA Y CONTENIDO
+  // 4. LÓGICA DE CONTENIDO (YOUTUBE, ETC)
   // ==========================================
   const searchContent = async (e) => {
     if (e) e.preventDefault();
-    if (!query || mode !== 'youtube') return;
-    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=20&q=${query}&type=video&key=${YOUTUBE_API_KEY}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    setVideos(data.items || []);
+    if (!query) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=24&q=${query}&type=video&key=${YOUTUBE_API_KEY}`);
+      const data = await res.json();
+      setVideos(data.items || []);
+      setSelectedVideo(null);
+    } catch (err) { console.error(err); }
+    setLoading(false);
   };
 
   // ==========================================
-  // VISTAS (RENDER)
+  // 5. RENDERIZADO
   // ==========================================
 
-  if (isBanned) return (
-    <div style={styles.errorFull}>
-      <h1 style={styles.glitch}>ACCESO BLOQUEADO</h1>
-      <p>Has sido baneado permanentemente de Alex Hub.</p>
-    </div>
-  );
+  if (authChecking) return <div style={styles.loadingFull}><div className="loader"></div><h1>CARGANDO ALEX HUB...</h1></div>;
 
-  if (!isAuthorized) return (
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-      <div style={styles.loginContainer}>
-        <div style={styles.loginBox}>
-          <h1 style={styles.logoText}>ALEX HUB <span style={{color: '#E50914'}}>ULTRA</span></h1>
-          <p style={styles.loginSub}>Inicia sesión con tu cuenta oficial para acceder</p>
-          
-          <div style={styles.googleBtnWrapper}>
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={() => alert("Error conectando con Google")}
-              useOneTap
-              theme="filled_blue"
-              shape="pill"
-              size="large"
-              text="continue_with"
-            />
+  // --- PANTALLA DE LOGIN ---
+  if (!isAuthorized) {
+    return (
+      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+        <div style={styles.loginPage}>
+          <div style={styles.loginCard}>
+            <h1 style={styles.mainTitle}>ALEX HUB <span style={{color: '#E50914'}}>ULTRA</span></h1>
+            <p style={styles.loginSub}>SISTEMA DE ACCESO SEGURO V13</p>
+            
+            <div style={styles.googleBtnWrapper}>
+              <GoogleLogin 
+                onSuccess={onGoogleSuccess}
+                onError={onGoogleError}
+                useOneTap
+                theme="filled_blue"
+                shape="pill"
+                text="signin_with"
+                width="300"
+              />
+            </div>
+
+            <button onClick={() => setShowAdminLogin(true)} style={styles.adminEntryBtn}>ALEX</button>
           </div>
 
-          <button onClick={openAdminWithAuth} style={styles.hiddenAdminBtn}>ALEX</button>
-        </div>
-      </div>
-    </GoogleOAuthProvider>
-  );
+          {/* MODAL LOGIN ADMIN */}
+          {showAdminLogin && (
+            <div style={styles.modalOverlay}>
+              <div style={styles.adminAuthBox}>
+                <h2>ACCESO RESTRINGIDO</h2>
+                <form onSubmit={verifyAdmin}>
+                  <input 
+                    type="password" 
+                    placeholder="CONTRASEÑA MAESTRA" 
+                    value={adminPassInput} 
+                    onChange={e => setAdminPassInput(e.target.value)} 
+                    style={styles.adminInput}
+                    autoFocus
+                  />
+                  <div style={{display:'flex', gap:'10px'}}>
+                    <button type="submit" style={styles.confirmBtn}>ENTRAR</button>
+                    <button type="button" onClick={() => setShowAdminLogin(false)} style={styles.cancelBtn}>SALIR</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
 
+          {/* FRAME GIGANTE DE ADMIN (Solo si está autenticado) */}
+          {adminAuthenticated && (
+            <div style={styles.giantAdminFrame}>
+              <div style={styles.adminHeader}>
+                <h1>ALEX HUB COMMAND CENTER</h1>
+                <button onClick={() => setAdminAuthenticated(false)} style={styles.closeAdmin}>CERRAR PANEL DE CONTROL</button>
+              </div>
+              
+              <div style={styles.adminGrid}>
+                {/* COLUMNA 1: GESTIÓN */}
+                <div style={styles.adminCol}>
+                  <h3>AÑADIR / BANEAR USUARIO</h3>
+                  <input 
+                    type="email" 
+                    placeholder="correo@gmail.com" 
+                    value={userToManage} 
+                    onChange={e => setUserToManage(e.target.value)} 
+                    style={styles.inputHero}
+                  />
+                  <div style={styles.btnRow}>
+                    <button onClick={addToWhitelist} style={styles.addBtn}>PERMITIR ACCESO</button>
+                    <button onClick={addToBlacklist} style={styles.banBtn}>BANEAR CORREO</button>
+                  </div>
+                </div>
+
+                {/* COLUMNA 2: LISTA BLANCA */}
+                <div style={styles.adminCol}>
+                  <h3>✅ PERMITIDOS ({whitelist.length})</h3>
+                  <div style={styles.listContainer}>
+                    {whitelist.map(email => (
+                      <div key={email} style={styles.listItem}>
+                        <span>{email}</span>
+                        <div style={{display:'flex', gap:'5px'}}>
+                           <button onClick={() => togglePremium(email)} style={premiumUsers.includes(email) ? styles.isPremium : styles.notPremium}>👑</button>
+                           <button onClick={() => removeFromList('authorized_emails', email)} style={styles.deleteBtn}>X</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* COLUMNA 3: BANEADOS */}
+                <div style={styles.adminCol}>
+                  <h3>🚫 BANEADOS ({blacklist.length})</h3>
+                  <div style={styles.listContainer}>
+                    {blacklist.map(email => (
+                      <div key={email} style={styles.listItem}>
+                        <span style={{color: '#E50914'}}>{email}</span>
+                        <button onClick={() => removeFromList('banned_emails', email)} style={styles.unbanBtn}>DESBANEAR</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </GoogleOAuthProvider>
+    );
+  }
+
+  // --- DASHBOARD PRINCIPAL (DESPUÉS DEL LOGIN EXITOSO) ---
   return (
-    <div style={styles.appWrapper}>
-      {/* NAVBAR */}
+    <div style={styles.app}>
       <nav style={styles.nav}>
         <div style={styles.navLeft}>
-          <div style={styles.brand}>ALEX<span>HUB</span></div>
+          <div style={styles.logo}>ALEX<span>HUB</span></div>
           <div style={styles.menu}>
-            {['youtube', 'twitch', 'movies', 'xbox'].map(m => (
-              <button key={m} onClick={() => setMode(m)} style={mode === m ? styles.activeTab : styles.tab}>
-                {m.toUpperCase()}
-              </button>
-            ))}
+             {['youtube', 'twitch', 'movies', 'xbox'].map(m => (
+               <button 
+                 key={m} 
+                 onClick={() => setMode(m)} 
+                 style={mode === m ? styles.menuActive : styles.menuBtn}
+               >
+                 {m.toUpperCase()}
+               </button>
+             ))}
           </div>
         </div>
 
@@ -201,175 +318,137 @@ export default function AlexHubUltraV13() {
           <input 
             placeholder="¿Qué quieres ver hoy?" 
             value={query} 
-            onChange={(e) => setQuery(e.target.value)} 
-            style={styles.input}
+            onChange={e => setQuery(e.target.value)}
           />
         </form>
 
         <div style={styles.navRight}>
-          {premiumList.includes(user.email) && <span style={styles.premiumTag}>👑 VIP</span>}
-          <img src={user.picture} style={styles.avatar} alt="profile" />
-          <button onClick={handleLogout} style={styles.logoutBtn}>SALIR</button>
-          <button onClick={openAdminWithAuth} style={styles.adminCircleBtn}>A</button>
+           {premiumUsers.includes(user.email) && <span style={styles.premiumTag}>👑 PREMIUM</span>}
+           <img src={user.picture} style={styles.userPic} alt="profile" />
+           <button onClick={() => window.location.href = PANIC_URL} style={styles.panicBtn}>PÁNICO</button>
+           <button onClick={handleLogout} style={styles.logoutBtn}>SALIR</button>
         </div>
       </nav>
 
-      {/* CONTENIDO PRINCIPAL */}
       <main style={styles.main}>
-        {mode === 'youtube' ? (
-          <div style={styles.videoGrid}>
+        {mode === 'youtube' && (
+          <div style={styles.youtubeGrid}>
             {selectedVideo ? (
-              <div style={styles.player}>
+              <div style={styles.playerContainer}>
+                <button onClick={() => setSelectedVideo(null)} style={styles.backBtn}>← VOLVER</button>
                 <iframe 
-                  src={`https://www.youtube.com/embed/${selectedVideo}?autoplay=1`} 
-                  style={styles.iframe} 
-                  allowFullScreen 
+                  src={`https://www.youtube-nocookie.com/embed/${selectedVideo}?autoplay=1`} 
+                  style={styles.fullIframe} 
+                  allowFullScreen
                 />
-                <button onClick={() => setSelectedVideo(null)} style={styles.closeBtn}>CERRAR REPRODUCTOR</button>
               </div>
             ) : (
               videos.map(v => (
-                <div key={v.id.videoId} style={styles.card} onClick={() => setSelectedVideo(v.id.videoId)}>
-                  <img src={v.snippet.thumbnails.high.url} style={styles.thumb} />
-                  <div style={styles.cardInfo}>{v.snippet.title}</div>
+                <div key={v.id.videoId} style={styles.videoCard} onClick={() => setSelectedVideo(v.id.videoId)}>
+                  <img src={v.snippet.thumbnails.high.url} alt="thumb" />
+                  <div style={styles.videoInfo}>
+                    <h4>{v.snippet.title}</h4>
+                    <p>{v.snippet.channelTitle}</p>
+                  </div>
                 </div>
               ))
             )}
           </div>
-        ) : (
-          <div style={styles.fullFrame}>
+        )}
+
+        {mode !== 'youtube' && (
+          <div style={styles.fullFrameContainer}>
             <iframe 
-              src={mode === 'twitch' ? `https://player.twitch.tv/?channel=${query || 'ibai'}&parent=alexhub.vercel.app` :
-                   mode === 'movies' ? `https://www.google.com/search?q=${query}+pelicula+completa+igu=1` :
-                   "https://www.xbox.com/play"} 
-              style={styles.iframe}
+               src={
+                 mode === 'twitch' ? `https://player.twitch.tv/?channel=${query || 'ibai'}&parent=alexhub.vercel.app` :
+                 mode === 'movies' ? `https://vidsrc.to/embed/movie/${query || 'tt0111161'}` :
+                 "https://www.xbox.com/play"
+               }
+               style={styles.fullIframe}
             />
           </div>
         )}
       </main>
-
-      {/* --- FRAME GIGANTE DE ADMIN (EL PANEL DE ALEX) --- */}
-      {adminPanelOpen && (
-        <div style={styles.adminOverlay}>
-          <div style={styles.adminModal}>
-            <div style={styles.adminHeader}>
-              <h2>CONTROL MAESTRO DE ALEX HUB</h2>
-              <button onClick={() => setAdminPanelOpen(false)} style={styles.closeAdmin}>×</button>
-            </div>
-            
-            <div style={styles.adminContent}>
-              <div style={styles.adminInputs}>
-                <input 
-                  value={newEmailInput} 
-                  onChange={(e) => setNewEmailInput(e.target.value)} 
-                  placeholder="Introduce correo electrónico..." 
-                  style={styles.inputAdmin}
-                />
-                <div style={styles.btnGroup}>
-                  <button onClick={() => addToDB('whitelist')} style={styles.btnAllow}>PERMITIR ACCESO</button>
-                  <button onClick={() => addToDB('blacklist')} style={styles.btnBan}>BANEAR CORREO</button>
-                  <button onClick={() => addToDB('premium')} style={styles.btnVip}>HACER PREMIUM</button>
-                </div>
-              </div>
-
-              <div style={styles.listsContainer}>
-                {/* LISTA DE ACCESO */}
-                <div style={styles.listSection}>
-                  <h3>✅ PERMITIDOS (WHITELIST)</h3>
-                  <div style={styles.scrollList}>
-                    {whiteList.map(email => (
-                      <div key={email} style={styles.listItem}>
-                        {email} <button onClick={() => removeFromDB('whitelist', email)}>Quitar</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* LISTA DE BAN */}
-                <div style={styles.listSection}>
-                  <h3>🚫 BANEADOS (BLACKLIST)</h3>
-                  <div style={styles.scrollList}>
-                    {blackList.map(email => (
-                      <div key={email} style={styles.listItem}>
-                        {email} <button onClick={() => removeFromDB('blacklist', email)}>Desbanear</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* LISTA PREMIUM */}
-                <div style={styles.listSection}>
-                  <h3>👑 PREMIUM USERS</h3>
-                  <div style={styles.scrollList}>
-                    {premiumList.map(email => (
-                      <div key={email} style={styles.listItem}>
-                        {email} <button onClick={() => removeFromDB('premium', email)}>Quitar VIP</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      
+      <footer style={styles.footer}>
+        <span>CONECTADO COMO: {user.email}</span>
+        <span>DOMAIN: Alexhub.vercel.app</span>
+        <span style={{color: '#00ff41'}}>ESTADO: ONLINE</span>
+      </footer>
     </div>
   );
 }
 
 // ==========================================
-// ESTILOS DE ALTA CALIDAD (CSS-IN-JS)
+// ESTILOS DE ALTA FIDELIDAD
 // ==========================================
 const styles = {
-  loginContainer: { height: '100vh', background: '#050505', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' },
-  loginBox: { background: '#0f0f0f', padding: '50px', borderRadius: '30px', border: '1px solid #333', textAlign: 'center', boxShadow: '0 0 50px rgba(229,9,20,0.2)' },
-  logoText: { fontSize: '40px', fontWeight: '900', color: '#fff', letterSpacing: '2px', marginBottom: '10px' },
-  loginSub: { color: '#888', marginBottom: '30px' },
-  googleBtnWrapper: { display: 'flex', justifyContent: 'center', marginBottom: '40px' },
-  hiddenAdminBtn: { background: 'none', border: 'none', color: '#222', cursor: 'pointer', fontSize: '12px' },
-
-  appWrapper: { height: '100vh', background: '#000', color: '#fff', display: 'flex', flexDirection: 'column' },
-  nav: { height: '70px', background: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', borderBottom: '1px solid #222' },
-  navLeft: { display: 'flex', alignItems: 'center', gap: '30px' },
-  brand: { fontSize: '24px', fontWeight: '900', color: '#fff' },
-  menu: { display: 'flex', gap: '10px' },
-  tab: { background: 'none', border: 'none', color: '#777', cursor: 'pointer', fontWeight: 'bold' },
-  activeTab: { background: '#E50914', border: 'none', color: '#fff', padding: '8px 15px', borderRadius: '5px', fontWeight: 'bold' },
-  searchBar: { flex: 1, maxWidth: '500px', margin: '0 20px' },
-  input: { width: '100%', background: '#1a1a1a', border: '1px solid #333', padding: '10px 20px', borderRadius: '20px', color: '#fff' },
-  navRight: { display: 'flex', alignItems: 'center', gap: '15px' },
-  avatar: { width: '35px', height: '35px', borderRadius: '50%' },
-  premiumTag: { color: '#FFD700', fontWeight: 'bold', fontSize: '12px' },
-  logoutBtn: { background: 'none', border: '1px solid #444', color: '#fff', padding: '5px 10px', borderRadius: '5px', cursor: 'pointer' },
-  adminCircleBtn: { width: '30px', height: '30px', borderRadius: '50%', background: '#333', border: 'none', color: '#fff', cursor: 'pointer' },
-
-  main: { flex: 1, padding: '20px', overflowY: 'auto' },
-  videoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' },
-  card: { background: '#111', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer' },
-  thumb: { width: '100%', aspectRatio: '16/9', objectFit: 'cover' },
-  cardInfo: { padding: '10px', fontSize: '14px', fontWeight: 'bold', color: '#ddd' },
+  loadingFull: { height: '100vh', background: '#000', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff' },
+  loginPage: { height: '100vh', background: '#050505', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' },
+  loginCard: { background: 'rgba(15,15,15,0.95)', padding: '60px', borderRadius: '40px', border: '1px solid #333', textAlign: 'center', boxShadow: '0 0 50px rgba(0,0,0,0.5)', zIndex: 10 },
+  mainTitle: { fontSize: '48px', fontWeight: '900', letterSpacing: '5px', marginBottom: '10px' },
+  loginSub: { color: '#666', letterSpacing: '2px', marginBottom: '40px' },
+  googleBtnWrapper: { display: 'flex', justifyContent: 'center', marginBottom: '30px' },
+  adminEntryBtn: { background: 'none', border: 'none', color: '#222', cursor: 'pointer', transition: '0.3s' },
   
-  player: { gridColumn: '1 / -1', height: '70vh' },
-  fullFrame: { height: '100%', width: '100%' },
-  iframe: { width: '100%', height: '100%', border: 'none' },
-  closeBtn: { background: '#E50914', color: '#fff', border: 'none', padding: '10px', width: '100%', cursor: 'pointer' },
+  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
+  adminAuthBox: { background: '#111', padding: '40px', borderRadius: '20px', border: '1px solid #E50914', textAlign: 'center' },
+  adminInput: { background: '#000', border: '1px solid #333', padding: '15px', borderRadius: '10px', color: '#fff', fontSize: '18px', width: '300px', marginBottom: '20px', textAlign: 'center' },
+  confirmBtn: { background: '#E50914', color: '#fff', border: 'none', padding: '12px 25px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
+  cancelBtn: { background: '#333', color: '#fff', border: 'none', padding: '12px 25px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' },
 
-  adminOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  adminModal: { background: '#111', width: '90%', height: '90%', borderRadius: '20px', border: '2px solid #E50914', display: 'flex', flexDirection: 'column' },
-  adminHeader: { padding: '20px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between' },
-  adminContent: { padding: '30px', flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' },
-  adminInputs: { display: 'flex', flexDirection: 'column', gap: '10px' },
-  inputAdmin: { padding: '15px', borderRadius: '10px', background: '#000', border: '1px solid #444', color: '#fff', fontSize: '18px' },
-  btnGroup: { display: 'flex', gap: '10px' },
-  btnAllow: { flex: 1, background: '#28c76f', color: '#fff', border: 'none', padding: '15px', borderRadius: '10px', fontWeight: 'bold' },
-  btnBan: { flex: 1, background: '#E50914', color: '#fff', border: 'none', padding: '15px', borderRadius: '10px', fontWeight: 'bold' },
-  btnVip: { flex: 1, background: '#FFD700', color: '#000', border: 'none', padding: '15px', borderRadius: '10px', fontWeight: 'bold' },
-  listsContainer: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', flex: 1, minHeight: 0 },
-  listSection: { background: '#0a0a0a', padding: '15px', borderRadius: '10px', display: 'flex', flexDirection: 'column' },
-  scrollList: { flex: 1, overflowY: 'auto', marginTop: '10px' },
-  listItem: { display: 'flex', justifyContent: 'space-between', padding: '10px', borderBottom: '1px solid #222', fontSize: '12px' },
-  closeAdmin: { background: 'none', border: 'none', color: '#fff', fontSize: '30px', cursor: 'pointer' },
+  giantAdminFrame: { position: 'fixed', inset: '20px', background: '#080808', border: '2px solid #E50914', borderRadius: '30px', zIndex: 200, display: 'flex', flexDirection: 'column', padding: '30px' },
+  adminHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: '1px solid #222', paddingBottom: '20px' },
+  closeAdmin: { background: '#E50914', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold' },
+  adminGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '30px', flex: 1, overflow: 'hidden' },
+  adminCol: { background: '#0f0f0f', borderRadius: '20px', padding: '20px', display: 'flex', flexDirection: 'column', border: '1px solid #1a1a1a' },
+  inputHero: { background: '#000', border: '1px solid #333', padding: '15px', borderRadius: '10px', color: '#fff', marginBottom: '15px' },
+  btnRow: { display: 'flex', gap: '10px' },
+  addBtn: { flex: 1, background: '#00ff41', color: '#000', border: 'none', padding: '10px', borderRadius: '8px', fontWeight: 'bold' },
+  banBtn: { flex: 1, background: '#E50914', color: '#fff', border: 'none', padding: '10px', borderRadius: '8px', fontWeight: 'bold' },
+  listContainer: { flex: 1, overflowY: 'auto', marginTop: '20px' },
+  listItem: { background: '#050505', padding: '12px', borderRadius: '10px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #111' },
+  deleteBtn: { background: '#333', color: '#fff', border: 'none', width: '30px', height: '30px', borderRadius: '5px' },
+  unbanBtn: { background: '#fff', color: '#000', border: 'none', padding: '5px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 'bold' },
+  isPremium: { background: '#FFD700', border: 'none', borderRadius: '5px', padding: '5px' },
+  notPremium: { background: '#222', border: 'none', borderRadius: '5px', padding: '5px' },
 
-  errorFull: { height: '100vh', background: '#000', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
-  glitch: { fontSize: '50px', color: '#E50914' }
+  app: { height: '100vh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff' },
+  nav: { height: '70px', background: '#000', borderBottom: '1px solid #111', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px' },
+  navLeft: { display: 'flex', alignItems: 'center', gap: '40px' },
+  logo: { fontSize: '24px', fontWeight: '900', letterSpacing: '2px' },
+  menu: { display: 'flex', gap: '10px' },
+  menuBtn: { background: 'none', border: 'none', color: '#666', fontWeight: 'bold', cursor: 'pointer' },
+  menuActive: { background: '#E50914', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '5px', fontWeight: 'bold' },
+  searchBar: { flex: 1, maxWidth: '500px', margin: '0 40px' },
+  userPic: { width: '35px', height: '35px', borderRadius: '50%', border: '2px solid #E50914' },
+  premiumTag: { color: '#FFD700', fontSize: '12px', fontWeight: 'bold' },
+  logoutBtn: { background: 'none', border: '1px solid #333', color: '#fff', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' },
+  panicBtn: { background: '#fff', color: '#000', border: 'none', padding: '8px 15px', borderRadius: '5px', fontWeight: 'bold' },
+
+  main: { flex: 1, overflowY: 'auto', padding: '20px' },
+  youtubeGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' },
+  videoCard: { cursor: 'pointer', transition: '0.3s' },
+  videoInfo: { padding: '10px 0' },
+  fullFrameContainer: { height: '100%', borderRadius: '20px', overflow: 'hidden' },
+  fullIframe: { width: '100%', height: '100%', border: 'none' },
+  playerContainer: { gridColumn: '1/-1', height: '80vh' },
+  backBtn: { marginBottom: '20px', background: '#222', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '5px' },
+  footer: { height: '30px', background: '#000', display: 'flex', justifyContent: 'space-between', padding: '0 20px', alignItems: 'center', fontSize: '10px', color: '#333' }
 };
+
+// Inyectar estilos CSS para animaciones
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.textContent = `
+    .loader { border: 4px solid #111; border-top: 4px solid #E50914; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .videoCard img { width: 100%; border-radius: 12px; transition: 0.3s; }
+    .videoCard:hover img { transform: scale(1.05); }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #000; }
+    ::-webkit-scrollbar-thumb { background: #222; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #E50914; }
+  `;
+  document.head.appendChild(style);
+}
