@@ -413,7 +413,7 @@ export default function AlexHubUltraV13() {
                 <iframe 
                   src={
                     ui.mode === 'youtube' 
-                      ? `https://www.youtube.com/embed/${ui.activeMedia}?autoplay=1&modestbranding=1&rel=0` 
+                      ? `https://www.youtube-nocookie.com/embed/${ui.activeMedia}?autoplay=1&modestbranding=1&rel=0` 
                       : ui.mode === 'twitch' 
                       ? `https://player.twitch.tv/?channel=${ui.searchQuery.replace(/\s+/g, '') || 'ibai'}&parent=${window.location.hostname}&autoplay=true` 
                       : ui.mode === 'movies' 
@@ -631,3 +631,4 @@ if (typeof document !== 'undefined') {
   `;
   document.head.appendChild(styleTag);
 }
+``` frameBorder
